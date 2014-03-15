@@ -6,45 +6,44 @@ import (
 	"log"
 )
 
-func listenToGerrit(username string, keyfile string, server string) (chan string, error) {
+func listenToGerrit(username string, keyfile string, server string) chan string {
+	streamChannel := make(chan string)
 
-	k := new(keychain)
-	// Add path to id_rsa file
-	k.loadPEM(keyfile)
+	go func() {
+		k := new(keychain)
+		// Add path to id_rsa file
+		k.loadPEM(keyfile)
 
-	config := &ssh.ClientConfig{
-		User: username,
-		Auth: []ssh.ClientAuth{
-			ssh.ClientAuthKeyring(k),
-		},
-	}
-	client, err := ssh.Dial("tcp", server, config)
-	if err != nil {
-		log.Fatalf("Failed to dial: %s", err.Error())
-		return nil, err
-	}
-	defer client.Close()
+		config := &ssh.ClientConfig{
+			User: username,
+			Auth: []ssh.ClientAuth{
+				ssh.ClientAuthKeyring(k),
+			},
+		}
+		client, err := ssh.Dial("tcp", server, config)
+		if err != nil {
+			panic("Failed to dial: " + err.Error())
 
-	session, err := client.NewSession()
-	if err != nil {
-		log.Fatalf("unable to create session: %s", err)
-		return nil, err
-	}
-	defer session.Close()
+		}
+		defer client.Close()
 
-	log.Printf("Connected to %s - listening for stream events...", server)
+		session, err := client.NewSession()
+		if err != nil {
+			panic("unable to create session: " + err.Error())
+		}
+		defer session.Close()
 
-	reader, _ := session.StderrPipe()
+		log.Printf("Connected to %s - listening for stream events...", server)
 
-	// if I don't set a buffer, I dont see anything get returned.
-	streamChannel := make(chan string, 1000)
+		reader, _ := session.StdoutPipe()
 
-	session.Start("gerrit --help")
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := scanner.Text()
-		streamChannel <- line
-	}
+		session.Start("gerrit stream-events")
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			line := scanner.Text()
+			streamChannel <- line
+		}
+	}()
 
-	return streamChannel, nil
+	return streamChannel
 }

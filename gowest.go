@@ -6,7 +6,7 @@ import (
 
 func main() {
 
-	events := listenToGerrit("amrk", "/Users/amrk/.ssh/id_rsa", "127.0.0.1:29418")
+	events := ListenToGerrit("amrk", "/Users/amrk/.ssh/id_rsa", "127.0.0.1:29418")
 
 	for {
 		event := <-events

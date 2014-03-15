@@ -2,35 +2,18 @@ package main
 
 import (
 	"bufio"
-	"code.google.com/p/go.crypto/ssh"
 	"log"
 )
 
-func listenToGerrit(username string, keyfile string, server string) chan string {
+func ListenToGerrit(username string, keyfile string, server string) chan string {
 	streamChannel := make(chan string)
 
 	go func() {
-		k := new(keychain)
-		// Add path to id_rsa file
-		k.loadPEM(keyfile)
-
-		config := &ssh.ClientConfig{
-			User: username,
-			Auth: []ssh.ClientAuth{
-				ssh.ClientAuthKeyring(k),
-			},
-		}
-		client, err := ssh.Dial("tcp", server, config)
-		if err != nil {
-			panic("Failed to dial: " + err.Error())
-
-		}
-		defer client.Close()
-
-		session, err := client.NewSession()
+		session, err := ConnectToSsh(username, keyfile, server)
 		if err != nil {
 			panic("unable to create session: " + err.Error())
 		}
+
 		defer session.Close()
 
 		log.Printf("Connected to %s - listening for stream events...", server)

@@ -37,3 +37,26 @@ func (k *keychain) loadPEM(file string) error {
 	k.add(key)
 	return nil
 }
+
+func ConnectToSsh(username string, keyfile string, server string) (*ssh.Session, error) {
+	k := new(keychain)
+	k.loadPEM(keyfile)
+
+	config := &ssh.ClientConfig{
+		User: username,
+		Auth: []ssh.ClientAuth{
+			ssh.ClientAuthKeyring(k),
+		},
+	}
+	client, err := ssh.Dial("tcp", server, config)
+	if err != nil {
+		panic("Failed to dial: " + err.Error())
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+
+	return session, nil
+}

@@ -2,11 +2,50 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"log"
 )
 
-func ListenToGerrit(username string, keyfile string, server string) chan string {
-	streamChannel := make(chan string)
+type PatchSet struct {
+	Number         string
+	Revision       string
+	Ref            string
+	Uploader       *User
+	CreatedOn      int64
+	Author         *User
+	IsDraft        bool
+	SizeInsertions int64
+	SizeDeletions  int64
+}
+
+type Change struct {
+	Project       string
+	Branch        string
+	Id            string
+	Number        string
+	Subject       string
+	Owner         *User
+	Url           string
+	CommitMessage string
+	Status        string
+}
+
+type User struct {
+	Name     string
+	Email    string
+	Username string
+}
+
+type Event struct {
+	Type     string
+	Change   *Change
+	PatchSet *PatchSet
+	Author   *User
+	Comment  string
+}
+
+func ListenToGerrit(username string, keyfile string, server string) chan Event {
+	streamChannel := make(chan Event)
 
 	go func() {
 		session, err := ConnectToSsh(username, keyfile, server)
@@ -24,7 +63,11 @@ func ListenToGerrit(username string, keyfile string, server string) chan string 
 		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
 			line := scanner.Text()
-			streamChannel <- line
+
+			var event Event
+			_ = json.Unmarshal([]byte(line), &event)
+
+			streamChannel <- event
 		}
 	}()
 

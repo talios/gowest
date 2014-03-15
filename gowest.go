@@ -10,7 +10,7 @@ func main() {
 
 	for {
 		event := <-events
-		log.Print(event)
+		log.Printf("Event type is %s, authored by %s", event.Type, event.Author.Email)
 	}
 
 }

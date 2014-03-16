@@ -96,8 +96,8 @@ func Git(projectPath string, args ...string) {
 	}
 
 	// run git specifying the project directory to use
-	gitArgs := append([]string{"-C", projectPath}, args...)
-	gitCmd := exec.Command(binary, gitArgs...)
+	gitCmd := exec.Command(binary, args...)
+	gitCmd.Dir = projectPath
 	gitOut, err := gitCmd.Output()
 
 	if err != nil {
@@ -116,7 +116,7 @@ func Build(projectPath string) {
 	log.Printf("Found %s - building", binary)
 	// run mvn
 	mvnCmd := exec.Command(binary, "clean", "install")
-	mvnCmd.Path = projectPath
+	mvnCmd.Dir = projectPath
 	mvnOut, err := mvnCmd.Output()
 	if err != nil {
 		panic(err)

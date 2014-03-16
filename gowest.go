@@ -43,15 +43,17 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 
 func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
 
+	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
+
 	// skip the project build if there's no section in the config for it.
-	_, err := config.GetSection(event.Change.Project)
+	_, err := config.GetSection(projectKey)
 	if err != nil {
 		log.Printf("Skipping undefined project: %s", event.Change.Project)
 		return
 	}
 
-	projectPath := GetProjectDirectory(event.Change.Project)
-	projectUrl, err := config.GetValue(event.Change.Project, "url")
+	projectPath := GetProjectDirectory(projectKey)
+	projectUrl, err := config.GetValue(projectKey, "url")
 	if err != nil {
 		log.Fatalf("No url specified for project: %s", event.Change.Project)
 	}

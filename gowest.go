@@ -9,7 +9,15 @@ import (
 )
 
 func main() {
-	events := ListenToGerrit("amrk", "/Users/amrk/.ssh/id_rsa", "127.0.0.1:29418")
+	cfg, err := LoadConfig()
+	if err != nil {
+		panic("No config")
+	}
+	userName, err := cfg.GetValue("gerrit", "username")
+	keyFile, err := cfg.GetValue("gerrit", "keyfile")
+	server, err := cfg.GetValue("gerrit", "server")
+
+	events := ListenToGerrit(userName, keyFile, server)
 
 	for {
 		event := <-events
@@ -23,8 +31,16 @@ func main() {
 	}
 }
 
-func RebuildProject(event Event) {
+func LoadConfig() (*goconfig.ConfigFile, error) {
 	cfg, err := goconfig.LoadConfigFile("gowest.ini")
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func RebuildProject(event Event) {
+	cfg, err := LoadConfig()
 	if err != nil {
 		panic("No config")
 	}

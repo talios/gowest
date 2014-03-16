@@ -13,20 +13,22 @@ func main() {
 	if err != nil {
 		panic("No config")
 	}
-	userName, err := cfg.GetValue("gerrit", "username")
-	keyFile, err := cfg.GetValue("gerrit", "keyfile")
-	server, err := cfg.GetValue("gerrit", "server")
 
-	events := ListenToGerrit(userName, keyFile, server)
+	var server ServerDetails
+
+	server.Username, _ = cfg.GetValue("gerrit", "username")
+	server.Keyfile, _ = cfg.GetValue("gerrit", "keyfile")
+	server.Location, _ = cfg.GetValue("gerrit", "server")
+
+	events := server.ListenToGerrit()
 
 	for {
 		event := <-events
 		switch event.Type {
 		case "comment-added":
-			//log.Printf("Commented added by %s: %s", event.Author.Email, event.Comment)
-			RebuildProject(event)
+			log.Printf("Commented added by %s: %s", event.Author.Email, event.Comment)
 		case "patchset-created":
-			RebuildProject(event)
+			RebuildProject(server, event)
 		}
 	}
 }
@@ -39,7 +41,7 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func RebuildProject(event Event) {
+func RebuildProject(server ServerDetails, event Event) {
 	cfg, err := LoadConfig()
 	if err != nil {
 		panic("No config")
@@ -54,7 +56,7 @@ func RebuildProject(event Event) {
 	Git(projectPath, "fetch", projectUrl, event.PatchSet.Ref)
 	Git(projectPath, "checkout", "FETCH_HEAD")
 
-	Build(projectPath)
+	Build(projectPath, server, event)
 }
 
 func GetWorkspace() string {
@@ -107,7 +109,7 @@ func Git(projectPath string, args ...string) {
 	fmt.Println(string(gitOut))
 }
 
-func Build(projectPath string) {
+func Build(projectPath string, server ServerDetails, event Event) {
 	binary, lookErr := exec.LookPath("mvn")
 	if lookErr != nil {
 		panic(lookErr)
@@ -117,10 +119,18 @@ func Build(projectPath string) {
 	// run mvn
 	mvnCmd := exec.Command(binary, "clean", "install")
 	mvnCmd.Dir = projectPath
-	mvnOut, err := mvnCmd.Output()
-	if err != nil {
-		panic(err)
+	mvnCmd.Stderr = os.Stderr
+	mvnCmd.Stdout = os.Stdout
+
+	if err := mvnCmd.Start(); err != nil {
+		log.Fatal(err)
+		return
 	}
 
-	fmt.Println(string(mvnOut))
+	if err := mvnCmd.Wait(); err != nil {
+		server.ReviewGerrit(event.PatchSet.Revision, "-1", "oh noes - you did broke it!")
+	} else {
+		server.ReviewGerrit(event.PatchSet.Revision, "+1", "oh hai - you much legend!")
+	}
+
 }

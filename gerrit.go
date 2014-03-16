@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
 )
 
@@ -45,18 +46,42 @@ type Event struct {
 	Comment  string
 }
 
-func ListenToGerrit(username string, keyfile string, server string) chan Event {
+type ServerDetails struct {
+	Username string
+	Keyfile  string
+	Location string
+}
+
+func (s *ServerDetails) ReviewGerrit(revision string, score string, message string) {
+	session, err := ConnectToSsh(s.Username, s.Keyfile, s.Location)
+	if err != nil {
+		panic("unable to create session: " + err.Error())
+	}
+
+	defer session.Close()
+
+	reviewCommand := fmt.Sprintf("gerrit review -m \"%s\" --code-review %s %s", message, score, revision)
+	log.Printf(">>> %s", reviewCommand)
+
+	output, err := session.Output(reviewCommand)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(output))
+}
+
+func (s *ServerDetails) ListenToGerrit() chan Event {
 	streamChannel := make(chan Event)
 
 	go func() {
-		session, err := ConnectToSsh(username, keyfile, server)
+		session, err := ConnectToSsh(s.Username, s.Keyfile, s.Location)
 		if err != nil {
 			panic("unable to create session: " + err.Error())
 		}
 
 		defer session.Close()
 
-		log.Printf("Connected to %s - listening for stream events...", server)
+		log.Printf("Connected to %s - listening for stream events...", s.Location)
 
 		reader, _ := session.StdoutPipe()
 

@@ -88,9 +88,6 @@ func (s *ServerDetails) ListenToGerrit() chan Event {
 		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
 			line := scanner.Text()
-
-			log.Print(line)
-
 			var event Event
 			_ = json.Unmarshal([]byte(line), &event)
 

@@ -9,6 +9,7 @@ import (
 type PatchSet struct {
 	Number         string
 	Revision       string
+	Parents        []string
 	Ref            string
 	Uploader       *User
 	CreatedOn      int64
@@ -63,6 +64,8 @@ func ListenToGerrit(username string, keyfile string, server string) chan Event {
 		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
 			line := scanner.Text()
+
+			log.Print(line)
 
 			var event Event
 			_ = json.Unmarshal([]byte(line), &event)

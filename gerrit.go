@@ -61,7 +61,6 @@ func (s *ServerDetails) ReviewGerrit(revision string, score string, message stri
 	defer session.Close()
 
 	reviewCommand := fmt.Sprintf("gerrit review -m \"%s\" --code-review %s %s", message, score, revision)
-	log.Printf(">>> %s", reviewCommand)
 
 	output, err := session.Output(reviewCommand)
 	if err != nil {

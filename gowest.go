@@ -28,7 +28,7 @@ func main() {
 		case "comment-added":
 			log.Printf("Commented added by %s: %s", event.Author.Email, event.Comment)
 		case "patchset-created":
-			RebuildProject(server, event)
+			go RebuildProject(cfg, server, event)
 		}
 	}
 }
@@ -41,14 +41,20 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func RebuildProject(server ServerDetails, event Event) {
-	cfg, err := LoadConfig()
+func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
+
+	// skip the project build if there's no section in the config for it.
+	_, err := config.GetSection(event.Change.Project)
 	if err != nil {
-		panic("No config")
+		log.Printf("Skipping undefined project: %s", event.Change.Project)
+		return
 	}
 
 	projectPath := GetProjectDirectory(event.Change.Project)
-	projectUrl, err := cfg.GetValue(event.Change.Project, "url")
+	projectUrl, err := config.GetValue(event.Change.Project, "url")
+	if err != nil {
+		log.Fatalf("No url specified for project: %s", event.Change.Project)
+	}
 
 	log.Printf("initializing empty git repository: %s", projectPath)
 	Git(projectPath, "init")

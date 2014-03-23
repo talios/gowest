@@ -63,6 +63,12 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 	log.Printf("fetching change ref: %s", event.PatchSet.Ref)
 	Git(projectPath, "fetch", projectUrl, event.PatchSet.Ref)
 	Git(projectPath, "checkout", "FETCH_HEAD")
+	Git(projectPath, "fetch", projectUrl, event.Change.Branch)
+
+	mergeErr := Git(projectPath, "merge", "FETCH_HEAD")
+	if mergeErr != nil {
+		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
+	}
 
 	Build(projectPath, server, event)
 }
@@ -98,11 +104,11 @@ func GetProjectDirectory(projectName string) string {
 	return projectPath
 }
 
-func Git(projectPath string, args ...string) {
+func Git(projectPath string, args ...string) error {
 	// Check Git is installed and on the path
 	binary, lookErr := exec.LookPath("git")
 	if lookErr != nil {
-		panic(lookErr)
+		return lookErr
 	}
 
 	// run git specifying the project directory to use
@@ -111,10 +117,12 @@ func Git(projectPath string, args ...string) {
 	gitOut, err := gitCmd.Output()
 
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	fmt.Println(string(gitOut))
+
+	return nil
 }
 
 func Build(projectPath string, server ServerDetails, event Event) {

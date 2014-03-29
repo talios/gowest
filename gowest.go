@@ -43,7 +43,7 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 
 func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
 
-	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
+	projectKey := fmt.Sprintf("project.%s", event.Change)
 
 	// skip the project build if there's no section in the config for it.
 	_, err := config.GetSection(projectKey)
@@ -52,7 +52,7 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		return
 	}
 
-	projectPath := GetProjectDirectory(projectKey)
+	projectPath := GetProjectDirectory(event.Change)
 	projectUrl, err := config.GetValue(projectKey, "url")
 	if err != nil {
 		log.Fatalf("No url specified for project: %s", event.Change.Project)
@@ -70,7 +70,7 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
 	}
 
-   if (isMavenProject(projectPath) == true) {
+	if isMavenProject(projectPath) == true {
 		buildMaven(projectPath, server, event)
 	}
 }
@@ -87,10 +87,19 @@ func GetWorkspace() string {
 	return workSpace
 }
 
-func GetProjectDirectory(projectName string) string {
+func GetProjectDirectory(change *Change) string {
 	workSpace := GetWorkspace()
 	// create workspace dir
-	projectPath := workSpace + "/" + projectName
+	projectPath := workSpace + "/" + change.Project
+	if change.Branch != "" {
+		projectPath = projectPath + "/" + change.Branch
+	} else {
+		projectPath = projectPath + "/" + "HEAD"
+	}
+	if change.Topic != "" {
+		projectPath = projectPath + "-" + change.Topic
+	}
+
 	log.Printf("creating workspace dir: %s", projectPath)
 
 	err := os.RemoveAll(projectPath)
@@ -126,4 +135,3 @@ func Git(projectPath string, args ...string) error {
 
 	return nil
 }
-

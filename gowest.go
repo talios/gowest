@@ -73,6 +73,7 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 	mergeErr := git(projectPath, "merge", "FETCH_HEAD")
 	if mergeErr != nil {
 		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
+		git(projectPath, "reset", "--hard", "HEAD")
 	}
 
 	if isMavenProject(projectPath) == true {

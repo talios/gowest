@@ -70,7 +70,7 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
 	}
 
-   if (isMavenProject(projectPath) {
+   if (isMavenProject(projectPath) == true) {
 		buildMaven(projectPath, server, event)
 	}
 }

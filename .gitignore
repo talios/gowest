@@ -1,3 +1,5 @@
 workspace
 gowest
+*.iml
+.idea
 

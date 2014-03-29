@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Unknwon/goconfig"
 	"log"
@@ -43,7 +44,7 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 
 func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
 
-	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
+	projectKey := fmt.Sprintf("project.%s", event.Change)
 
 	// skip the project build if there's no section in the config for it.
 	_, err := config.GetSection(projectKey)
@@ -52,61 +53,92 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		return
 	}
 
-	projectPath := GetProjectDirectory(projectKey)
+	projectPath, err := makeProjectDirectory(config, event.Change)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	projectUrl, err := config.GetValue(projectKey, "url")
 	if err != nil {
 		log.Fatalf("No url specified for project: %s", event.Change.Project)
 	}
 
 	log.Printf("initializing empty git repository: %s", projectPath)
-	Git(projectPath, "init")
+	git(projectPath, "init")
 	log.Printf("fetching change ref: %s", event.PatchSet.Ref)
-	Git(projectPath, "fetch", projectUrl, event.PatchSet.Ref)
-	Git(projectPath, "checkout", "FETCH_HEAD")
-	Git(projectPath, "fetch", projectUrl, event.Change.Branch)
+	git(projectPath, "fetch", projectUrl, event.PatchSet.Ref)
+	git(projectPath, "checkout", "FETCH_HEAD")
+	git(projectPath, "fetch", projectUrl, event.Change.Branch)
 
-	mergeErr := Git(projectPath, "merge", "FETCH_HEAD")
+	mergeErr := git(projectPath, "merge", "FETCH_HEAD")
 	if mergeErr != nil {
 		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
 	}
 
-   if (isMavenProject(projectPath) == true) {
+	if isMavenProject(projectPath) == true {
 		buildMaven(projectPath, server, event)
 	}
 }
 
-func GetWorkspace() string {
-	tempDir, _ := os.Getwd()
+func getWorkspace(config *goconfig.ConfigFile) (string, error) {
+	tempDir, err := config.GetValue("gowest", "workspace")
+	if err != nil {
+		return "", errors.New("No workspace field defined under [gowest] in gowest.ini!")
+	}
 	workSpace := tempDir + "/workspace"
-	err := os.MkdirAll(workSpace, 0777)
+	err = os.MkdirAll(workSpace, 0777)
 	if err != nil {
 		if !os.IsExist(err) {
-			panic(err)
+			return "", err
 		}
 	}
-	return workSpace
+	return workSpace, nil
 }
 
-func GetProjectDirectory(projectName string) string {
-	workSpace := GetWorkspace()
-	// create workspace dir
-	projectPath := workSpace + "/" + projectName
+func getProjectDirectory(config *goconfig.ConfigFile, change *Change) (string, error) {
+	workspace, err := getWorkspace(config)
+	if err != nil {
+		return "", err
+	}
+	projectPath := workspace + "/" + getProjectSubDirectory(change)
+	return projectPath, nil
+}
+
+func makeProjectDirectory(config *goconfig.ConfigFile, change *Change) (string, error) {
+	projectPath, err := getProjectDirectory(config, change)
+	if err != nil {
+		return "", err
+	}
+
 	log.Printf("creating workspace dir: %s", projectPath)
 
-	err := os.RemoveAll(projectPath)
+	err = os.RemoveAll(projectPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			panic("Unable to remove " + projectPath)
+			return "", fmt.Errorf("Unable to remove %s: %s", projectPath, err)
 		}
 	}
 	os.MkdirAll(projectPath, 0777)
 	if err != nil {
-		panic("Unable to create " + projectPath)
+		return "", fmt.Errorf("Unable to create %s: %s", projectPath, err)
+	}
+	return projectPath, nil
+}
+
+func getProjectSubDirectory(change *Change) string {
+	projectPath := change.Project
+	if change.Branch != "" {
+		projectPath = projectPath + "/" + change.Branch
+	} else {
+		projectPath = projectPath + "/" + "HEAD"
+	}
+	if change.Topic != "" {
+		projectPath = projectPath + "-" + change.Topic
 	}
 	return projectPath
 }
 
-func Git(projectPath string, args ...string) error {
+func git(projectPath string, args ...string) error {
 	// Check Git is installed and on the path
 	binary, lookErr := exec.LookPath("git")
 	if lookErr != nil {
@@ -126,4 +158,3 @@ func Git(projectPath string, args ...string) error {
 
 	return nil
 }
-

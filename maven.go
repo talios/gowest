@@ -6,11 +6,11 @@ import (
 	"os/exec"
 )
 
-func isMavenProject(projectPath string) (bool) {
+func isMavenProject(projectPath string) bool {
 	if _, err := os.Stat(projectPath + "/pom.xml"); err == nil {
-    	return true
-    } else {
-		return false;
+		return true
+	} else {
+		return false
 	}
 }
 

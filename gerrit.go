@@ -23,6 +23,7 @@ type PatchSet struct {
 type Change struct {
 	Project       string
 	Branch        string
+	Topic         string
 	Id            string
 	Number        string
 	Subject       string

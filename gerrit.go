@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 )
 
 type PatchSet struct {
@@ -67,7 +68,7 @@ func (s *ServerDetails) ReviewGerrit(revision string, score string, message stri
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(output))
+	log.Printf("%s: %s", string(output), message)
 }
 
 func (s *ServerDetails) ListenToGerrit() chan Event {
@@ -97,4 +98,10 @@ func (s *ServerDetails) ListenToGerrit() chan Event {
 	}()
 
 	return streamChannel
+}
+
+func isUpdatedPatchset(left Event, right Event) bool {
+	leftPatchSet, _ := strconv.ParseInt(left.PatchSet.Number, 8, 0)
+	rightPatchSet, _ := strconv.ParseInt(right.PatchSet.Number, 8, 0)
+	return left.Change.Id == right.Change.Id && leftPatchSet < rightPatchSet
 }

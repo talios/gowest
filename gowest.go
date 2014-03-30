@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"time"
 )
 
 func main() {
@@ -23,15 +24,36 @@ func main() {
 
 	events := server.ListenToGerrit()
 
+	changeEventChannelMap := make(map[string]chan Event)
+
 	for {
 		event := <-events
+		changeEventChannel := findOrCreateChangeEventChannel(changeEventChannelMap, event)
+
 		switch event.Type {
 		case "comment-added":
 			log.Printf("Commented added by %s: %s", event.Author.Email, event.Comment)
 		case "patchset-created":
-			go RebuildProject(cfg, server, event)
+			select {
+			case changeEventChannel <- event:
+				log.Printf("Notified previous build of new change %s of updated patchset.. sleeping for 5 seconds before building...", event.Change.Id)
+				time.Sleep(5 * time.Second)
+			case <-time.After(5 * time.Second):
+				log.Print("No previous builds... building!")
+			}
+
+			go RebuildProject(cfg, server, event, changeEventChannel)
 		}
 	}
+}
+
+func findOrCreateChangeEventChannel(changeEventChannelMap map[string]chan Event, event Event) chan Event {
+	changeEventChannel, exists := changeEventChannelMap[event.Change.Id]
+	if !exists {
+		changeEventChannel = make(chan Event)
+		changeEventChannelMap[event.Change.Id] = changeEventChannel
+	}
+	return changeEventChannel
 }
 
 func LoadConfig() (*goconfig.ConfigFile, error) {
@@ -42,7 +64,7 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
+func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event) {
 
 	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
 
@@ -77,7 +99,7 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 	}
 
 	if isMavenProject(projectPath) == true {
-		buildMaven(projectPath, server, event)
+		buildMaven(projectPath, server, event, eventChannel)
 	}
 }
 

@@ -47,7 +47,7 @@ func buildMaven(projectPath string, server ServerDetails, event Event, eventChan
 		} else {
 			server.ReviewGerrit(event.PatchSet.Revision, "+1", "oh hai - you much legend!")
 		}
-		return
+		break
 	case gerritEvent := <-eventChannel:
 		if isUpdatedPatchset(event, gerritEvent) {
 			log.Printf("Cancelling build of patchset %s of change %s on project %s.", event.PatchSet.Number, event.Change.Id, event.Change.Project)

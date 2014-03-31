@@ -37,6 +37,24 @@
     },
     {
       "key": {
+        "uuid": "3a79b1b5_d4399cd9",
+        "filename": "gowest.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000264
+      },
+      "writtenOn": "2014-03-31T08:10:17Z",
+      "side": 1,
+      "message": "Updated to use the event\u0027s Project in a follow up review.",
+      "parentUuid": "5a7ca5a3_b8541522",
+      "revId": "65d4811e68eff90c76024d9a64047e4fd85807a2",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "5a7ca5a3_3881e54a",
         "filename": "maven.go",
         "patchSetId": 1
@@ -66,6 +84,24 @@
       "side": 1,
       "message": "If this was a switch state then yes, but a \u0027select\u0027 statement in go-lang is designed specifically around channels/io - the select blocks until all messages are received but executes the block immediately.\n\nHowever - I should check that the return statement here actually breaks/escapes the select block.",
       "parentUuid": "5a7ca5a3_3881e54a",
+      "revId": "65d4811e68eff90c76024d9a64047e4fd85807a2",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a79b1b5_f43618e7",
+        "filename": "maven.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 43,
+      "author": {
+        "id": 1000264
+      },
+      "writtenOn": "2014-03-31T08:10:17Z",
+      "side": 1,
+      "message": "Looks like using \u0027break\u0027 instead of \u0027return\u0027 here however is the proper way of escaping the select.\n\nI _believe_ that \u0027return\u0027 would actually work and return from the entire function, but this is cleaner.",
+      "parentUuid": "5a7ca5a3_183bc9ec",
       "revId": "65d4811e68eff90c76024d9a64047e4fd85807a2",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": false

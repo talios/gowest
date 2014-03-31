@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5a7ca5a3_187c2972",
+        "filename": "gowest.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000430
+      },
+      "writtenOn": "2014-03-31T00:26:21Z",
+      "side": 1,
+      "message": "are you cleaning out this map as builds complete?",
+      "revId": "65d4811e68eff90c76024d9a64047e4fd85807a2",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "5a7ca5a3_3881e54a",
+        "filename": "maven.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 43,
+      "author": {
+        "id": 1000430
+      },
+      "writtenOn": "2014-03-31T00:26:21Z",
+      "side": 1,
+      "message": "don\u0027t  you need this in some sort of loop? won\u0027t a gerrit event cause it to fall out of the switch statement and just \"return\"?",
+      "revId": "65d4811e68eff90c76024d9a64047e4fd85807a2",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    }
+  ]
+}

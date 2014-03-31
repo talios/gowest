@@ -28,7 +28,7 @@ func main() {
 
 	for {
 		event := <-events
-		changeEventChannel := findOrCreateChangeEventChannel(changeEventChannelMap, event)
+		changeEventChannel := findOrCreateProjectEventChannel(changeEventChannelMap, event)
 
 		switch event.Type {
 		case "comment-added":
@@ -47,13 +47,16 @@ func main() {
 	}
 }
 
-func findOrCreateChangeEventChannel(changeEventChannelMap map[string]chan Event, event Event) chan Event {
-	changeEventChannel, exists := changeEventChannelMap[event.Change.Id]
+/*
+ * Lookup an event channel based on the Event's project, if not existing in the map - create one and insert
+ */
+func findOrCreateProjectEventChannel(projectEventChannelMap map[string]chan Event, event Event) chan Event {
+	projectEventChannel, exists := projectEventChannelMap[event.Change.Project]
 	if !exists {
-		changeEventChannel = make(chan Event)
-		changeEventChannelMap[event.Change.Id] = changeEventChannel
+		projectEventChannel = make(chan Event)
+		projectEventChannelMap[event.Change.Project] = projectEventChannel
 	}
-	return changeEventChannel
+	return projectEventChannel
 }
 
 func LoadConfig() (*goconfig.ConfigFile, error) {

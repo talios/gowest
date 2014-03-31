@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a79b1b5_14cab4a1",
+        "filename": "gowest.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000430
+      },
+      "writtenOn": "2014-03-31T09:54:33Z",
+      "side": 1,
+      "message": "Project is a weird name, I understand its a Gerrit Project, but still. Its more of a Repository or even a branch. But I suppose you are tracking the whole project.",
+      "revId": "16ece165ed293d9de68276f673c681af0497ef35",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    }
+  ]
+}

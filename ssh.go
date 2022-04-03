@@ -1,9 +1,9 @@
 package main
 
 import (
-	"code.google.com/p/go.crypto/ssh"
-	"io"
 	"io/ioutil"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type keychain struct {
@@ -15,10 +15,6 @@ func (k *keychain) Key(i int) (ssh.PublicKey, error) {
 		return nil, nil
 	}
 	return k.keys[i].PublicKey(), nil
-}
-
-func (k *keychain) Sign(i int, rand io.Reader, data []byte) (sig []byte, err error) {
-	return k.keys[i].Sign(rand, data)
 }
 
 func (k *keychain) add(key ssh.Signer) {
@@ -38,16 +34,18 @@ func (k *keychain) loadPEM(file string) error {
 	return nil
 }
 
-func ConnectToSsh(username string, keyfile string, server string) (*ssh.Session, error) {
+func connectToSSH(username string, keyfile string, server string) (*ssh.Session, error) {
 	k := new(keychain)
 	k.loadPEM(keyfile)
 
+	auths := []ssh.AuthMethod{ssh.PublicKeys(k.keys...)}
+
 	config := &ssh.ClientConfig{
-		User: username,
-		Auth: []ssh.ClientAuth{
-			ssh.ClientAuthKeyring(k),
-		},
+		User:            username,
+		Auth:            auths,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
+
 	client, err := ssh.Dial("tcp", server, config)
 	if err != nil {
 		panic("Failed to dial: " + err.Error())

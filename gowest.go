@@ -3,15 +3,17 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/Unknwon/goconfig"
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"time"
+
+	"github.com/Unknwon/goconfig"
 )
 
 func main() {
-	cfg, err := LoadConfig()
+	cfg, err := loadConfig()
 	if err != nil {
 		panic("No config")
 	}
@@ -31,18 +33,18 @@ func main() {
 		changeEventChannel := findOrCreateProjectEventChannel(changeEventChannelMap, event)
 
 		switch event.Type {
-		case "comment-added":
-			log.Printf("Commented added by %s: %s", event.Author.Email, event.Comment)
+		// case "comment-added":
+		// 	log.Printf("Commented added by %s: %s", event.Uploader.Email, event.Comment)
 		case "patchset-created":
 			select {
 			case changeEventChannel <- event:
-				log.Printf("Notified previous build of new change %s of updated patchset.. sleeping for 5 seconds before building...", event.Change.Id)
+				log.Printf("Notified previous build of new change %s of updated patchset.. sleeping for 5 seconds before building...", event.Change.ID)
 				time.Sleep(5 * time.Second)
 			case <-time.After(5 * time.Second):
 				log.Print("No previous builds... building!")
 			}
 
-			go RebuildProject(cfg, server, event, changeEventChannel)
+			go rebuildProject(cfg, server, event, changeEventChannel)
 		}
 	}
 }
@@ -59,7 +61,7 @@ func findOrCreateProjectEventChannel(projectEventChannelMap map[string]chan Even
 	return projectEventChannel
 }
 
-func LoadConfig() (*goconfig.ConfigFile, error) {
+func loadConfig() (*goconfig.ConfigFile, error) {
 	cfg, err := goconfig.LoadConfigFile("gowest.ini")
 	if err != nil {
 		return nil, err
@@ -67,7 +69,7 @@ func LoadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event) {
+func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event) {
 
 	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
 
@@ -78,26 +80,29 @@ func RebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		return
 	}
 
-	projectPath, err := makeProjectDirectory(config, event.Change)
+	projectPath, err := makeProjectDirectory(config, &event)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	projectUrl, err := config.GetValue(projectKey, "url")
+	projectURL, err := config.GetValue(projectKey, "url")
 	if err != nil {
 		log.Fatalf("No url specified for project: %s", event.Change.Project)
 	}
 
-	log.Printf("initializing empty git repository: %s", projectPath)
-	git(projectPath, "init")
+	if !isGitRepo(projectPath) {
+		log.Printf("initializing empty git repository: %s", projectPath)
+		git(projectPath, "init")
+	}
+
 	log.Printf("fetching change ref: %s", event.PatchSet.Ref)
-	git(projectPath, "fetch", projectUrl, event.PatchSet.Ref)
+	git(projectPath, "fetch", projectURL, event.PatchSet.Ref)
 	git(projectPath, "checkout", "FETCH_HEAD")
-	git(projectPath, "fetch", projectUrl, event.Change.Branch)
+	git(projectPath, "fetch", projectURL, event.Change.Branch)
 
 	mergeErr := git(projectPath, "merge", "FETCH_HEAD")
 	if mergeErr != nil {
-		server.ReviewGerrit(event.PatchSet.Revision, "-1", "gosh darn it - we can't do the dang merge!")
+		server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", "gosh darn it - we can't do the dang merge!")
 		git(projectPath, "reset", "--hard", "HEAD")
 	}
 
@@ -121,17 +126,17 @@ func getWorkspace(config *goconfig.ConfigFile) (string, error) {
 	return workSpace, nil
 }
 
-func getProjectDirectory(config *goconfig.ConfigFile, change *Change) (string, error) {
+func getProjectDirectory(config *goconfig.ConfigFile, event *Event) (string, error) {
 	workspace, err := getWorkspace(config)
 	if err != nil {
 		return "", err
 	}
-	projectPath := workspace + "/" + getProjectSubDirectory(change)
+	projectPath := workspace + "/" + getProjectSubDirectory(event)
 	return projectPath, nil
 }
 
-func makeProjectDirectory(config *goconfig.ConfigFile, change *Change) (string, error) {
-	projectPath, err := getProjectDirectory(config, change)
+func makeProjectDirectory(config *goconfig.ConfigFile, event *Event) (string, error) {
+	projectPath, err := getProjectDirectory(config, event)
 	if err != nil {
 		return "", err
 	}
@@ -151,7 +156,8 @@ func makeProjectDirectory(config *goconfig.ConfigFile, change *Change) (string, 
 	return projectPath, nil
 }
 
-func getProjectSubDirectory(change *Change) string {
+func getProjectSubDirectory(event *Event) string {
+	change := event.Change
 	projectPath := change.Project
 	if change.Branch != "" {
 		projectPath = projectPath + "/" + change.Branch
@@ -161,6 +167,8 @@ func getProjectSubDirectory(change *Change) string {
 	if change.Topic != "" {
 		projectPath = projectPath + "-" + change.Topic
 	}
+	projectPath = projectPath + "-" + change.ID
+	projectPath = projectPath + "-" + strconv.Itoa(event.PatchSet.Number)
 	return projectPath
 }
 

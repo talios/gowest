@@ -1,17 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 )
 
+// BuildProcess Enum type for build status
+type BuildProcess int
+
+const (
+	// Success The build was successful
+	Success BuildProcess = iota
+	// Failure The build failed
+	Failure
+)
+
+func isGitRepo(projectPath string) bool {
+	if _, err := os.Stat(projectPath + "/.git"); err == nil {
+		return true
+	}
+	return false
+}
+
 func isMavenProject(projectPath string) bool {
 	if _, err := os.Stat(projectPath + "/pom.xml"); err == nil {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
 func buildMaven(projectPath string, server ServerDetails, event Event, eventChannel chan Event) {
@@ -26,33 +43,42 @@ func buildMaven(projectPath string, server ServerDetails, event Event, eventChan
 	mvnCmd.Dir = projectPath
 
 	if err := mvnCmd.Start(); err != nil {
+		server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Unable to start build: "+fmt.Sprint(err))
 		log.Fatal(err)
 		return
 	}
 
-	processChannel := make(chan bool)
+	server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Verifying build...")
+
+	processChannel := make(chan BuildProcess)
 
 	go func() {
 		if err := mvnCmd.Wait(); err != nil {
-			processChannel <- false
+			processChannel <- Failure
 		} else {
-			processChannel <- true
+			processChannel <- Success
 		}
 	}()
 
 	select {
 	case processStatus := <-processChannel:
-		if processStatus {
-			server.ReviewGerrit(event.PatchSet.Revision, "-1", "oh noes - you did broke it!")
-		} else {
-			server.ReviewGerrit(event.PatchSet.Revision, "+1", "oh hai - you much legend!")
+		switch processStatus {
+		case Success:
+			server.ReviewGerrit(event.PatchSet.Revision, "+1", "+1", "+1", "oh hai - you much legend!")
+		case Failure:
+			out, err := mvnCmd.Output()
+			message := "oh noes - you did broke it!"
+			if err == nil {
+				message = message + "\n\n\n" + string(out)
+			}
+			server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", message)
 		}
 		break
 	case gerritEvent := <-eventChannel:
 		if isUpdatedPatchset(event, gerritEvent) {
-			log.Printf("Cancelling build of patchset %s of change %s on project %s.", event.PatchSet.Number, event.Change.Id, event.Change.Project)
+			log.Printf("Cancelling build of patchset %d of change %s on project %s.", event.PatchSet.Number, event.Change.ID, event.Change.Project)
 			mvnCmd.Process.Kill()
-			server.ReviewGerrit(event.PatchSet.Revision, "0", "such sadness - much building aborted :(!")
+			// server.ReviewGerrit(event.PatchSet.Revision, "0", "0", "-1", "such sadness - much building aborted :(!")
 		}
 
 	}

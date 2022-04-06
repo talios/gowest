@@ -7,6 +7,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type GerritEvent struct {
+	Type           string `json:"type"`
+	EventCreatedOn int    `json:"eventCreatedOn"`
+}
+
+type Update struct {
+	Submitter User      `json:"submitter"`
+	RefUpdate RefUpdate `json:"refUpdate"`
+	GerritEvent
+}
+
+type RefUpdate struct {
+	OldRev  string `json:"oldRev"`
+	NewRev  string `json:"newRev"`
+	RefName string `json:"refName"`
+	Project string `json:"project"`
+}
+
 type User struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -14,14 +32,13 @@ type User struct {
 }
 
 type Event struct {
-	Uploader       User      `json:"uploader"`
-	PatchSet       PatchSet  `json:"patchSet"`
-	Change         Change    `json:"change"`
-	Project        string    `json:"project"`
-	RefName        string    `json:"refName"`
-	ChangeKey      ChangeKey `json:"changeKey"`
-	Type           string    `json:"type"`
-	EventCreatedOn int       `json:"eventCreatedOn"`
+	Uploader  User      `json:"uploader"`
+	PatchSet  PatchSet  `json:"patchSet"`
+	Change    Change    `json:"change"`
+	Project   string    `json:"project"`
+	RefName   string    `json:"refName"`
+	ChangeKey ChangeKey `json:"changeKey"`
+	GerritEvent
 }
 
 type PatchSet struct {
@@ -51,6 +68,7 @@ type Change struct {
 	Status        string   `json:"status"`
 	Topic         string   `json:"topic"`
 }
+
 type ChangeKey struct {
 	ID string `json:"id"`
 }

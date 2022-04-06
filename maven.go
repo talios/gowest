@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // BuildProcess Enum type for build status
@@ -79,7 +80,5 @@ func buildMaven(projectPath string, server ServerDetails, event Event, eventChan
 			mvnCmd.Process.Kill()
 			// server.ReviewGerrit(event.PatchSet.Revision, "0", "0", "-1", "such sadness - much building aborted :(!")
 		}
-
 	}
-
 }

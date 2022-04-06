@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -98,7 +99,7 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 	log.Printf("%s: %s", string(output), message)
 }
 
-func (s *ServerDetails) listenToGerrit() chan Event {
+func (s *ServerDetails) listenToGerrit(verboseMode bool) chan Event {
 	streamChannel := make(chan Event)
 
 	go func() {
@@ -118,10 +119,9 @@ func (s *ServerDetails) listenToGerrit() chan Event {
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			log.Println("---")
-			log.Println(line)
-			log.Println("---")
-
+			if *&verboseMode {
+				log.Println(line)
+			}
 			var event Event
 			err = json.Unmarshal([]byte(line), &event)
 

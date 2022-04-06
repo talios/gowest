@@ -10,9 +10,16 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Unknwon/goconfig"
+	"gopkg.in/alecthomas/kingpin.v2"
+)
+
+var (
+	verboseMode = kingpin.Flag("verbose", "Run in verbose mode.").Short('v').Bool()
 )
 
 func main() {
+	kingpin.Parse()
+
 	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatal("No config")
@@ -25,7 +32,7 @@ func main() {
 	server.Keyfile, _ = cfg.GetValue("gerrit", "keyfile")
 	server.Location, _ = cfg.GetValue("gerrit", "server")
 
-	events := server.listenToGerrit()
+	events := server.listenToGerrit(*verboseMode)
 
 	changeEventChannelMap := make(map[string]chan Event)
 

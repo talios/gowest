@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 )
 
 type User struct {
@@ -61,7 +61,7 @@ type ServerDetails struct {
 	Location string
 }
 
-// ReviewGerrit updates a given gerrut revision with a score and message
+// ReviewGerrit updates a given gerrit revision with a score and message
 func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifiedScore string, mergeScore string, message string) {
 	session, err := connectToSSH(s.Username, s.Keyfile, s.Location)
 	if err != nil {
@@ -75,12 +75,12 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 
 	output, err := session.Output(reviewCommand)
 	if err != nil {
-		panic(err)
+		log.Warn(err)
 	}
 	log.Printf("%s: %s", string(output), message)
 }
 
-func (s *ServerDetails) ListenToGerrit() chan Event {
+func (s *ServerDetails) listenToGerrit() chan Event {
 	streamChannel := make(chan Event)
 
 	go func() {

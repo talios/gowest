@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
-	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/Unknwon/goconfig"
 )
@@ -15,6 +15,7 @@ import (
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
+		log.Fatal("No config")
 		panic("No config")
 	}
 
@@ -24,7 +25,7 @@ func main() {
 	server.Keyfile, _ = cfg.GetValue("gerrit", "keyfile")
 	server.Location, _ = cfg.GetValue("gerrit", "server")
 
-	events := server.ListenToGerrit()
+	events := server.listenToGerrit()
 
 	changeEventChannelMap := make(map[string]chan Event)
 
@@ -38,10 +39,12 @@ func main() {
 		case "patchset-created":
 			select {
 			case changeEventChannel <- event:
-				log.Printf("Notified previous build of new change %s of updated patchset.. sleeping for 5 seconds before building...", event.Change.ID)
-				time.Sleep(5 * time.Second)
-			case <-time.After(5 * time.Second):
-				log.Print("No previous builds... building!")
+				log.WithFields(log.Fields{
+					"changeID": event.Change.ID,
+				}).Info("Triggering build")
+				// time.Sleep(5 * time.Second)
+				// case <-time.After(5 * time.Second):
+				// 	log.Info("No previous builds... building!")
 			}
 
 			go rebuildProject(cfg, server, event, changeEventChannel)
@@ -73,29 +76,38 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 
 	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
 
+	projectLogger := log.WithFields(log.Fields{
+		"project": projectKey,
+	})
+
 	// skip the project build if there's no section in the config for it.
 	_, err := config.GetSection(projectKey)
 	if err != nil {
-		log.Printf("Skipping undefined project: %s", event.Change.Project)
+		projectLogger.Warn("Skipping undefined project")
 		return
 	}
 
 	projectPath, err := makeProjectDirectory(config, &event)
 	if err != nil {
-		log.Fatal(err)
+		projectLogger.Warn(err)
+		return
 	}
+
+	projectPathLogger := projectLogger.WithFields(log.Fields{
+		"path": projectPath,
+	})
 
 	projectURL, err := config.GetValue(projectKey, "url")
 	if err != nil {
-		log.Fatalf("No url specified for project: %s", event.Change.Project)
+		projectLogger.Warn("No url specified for project")
 	}
 
 	if !isGitRepo(projectPath) {
-		log.Printf("initializing empty git repository: %s", projectPath)
+		projectPathLogger.Print("initializing empty git repository")
 		git(projectPath, "init")
 	}
 
-	log.Printf("fetching change ref: %s", event.PatchSet.Ref)
+	projectPathLogger.Printf("fetching change ref: %s", event.PatchSet.Ref)
 	git(projectPath, "fetch", projectURL, event.PatchSet.Ref)
 	git(projectPath, "checkout", "FETCH_HEAD")
 	git(projectPath, "fetch", projectURL, event.Change.Branch)
@@ -114,7 +126,7 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 func getWorkspace(config *goconfig.ConfigFile) (string, error) {
 	tempDir, err := config.GetValue("gowest", "workspace")
 	if err != nil {
-		return "", errors.New("No workspace field defined under [gowest] in gowest.ini!")
+		return "", errors.New("no workspace field defined under [gowest] in gowest.ini")
 	}
 	workSpace := tempDir + "/workspace"
 	err = os.MkdirAll(workSpace, 0777)
@@ -131,7 +143,7 @@ func getProjectDirectory(config *goconfig.ConfigFile, event *Event) (string, err
 	if err != nil {
 		return "", err
 	}
-	projectPath := workspace + "/" + getProjectSubDirectory(event)
+	projectPath := workspace + "/" + getProjectSubDirectory(&event.Change, &event.PatchSet)
 	return projectPath, nil
 }
 
@@ -156,8 +168,7 @@ func makeProjectDirectory(config *goconfig.ConfigFile, event *Event) (string, er
 	return projectPath, nil
 }
 
-func getProjectSubDirectory(event *Event) string {
-	change := event.Change
+func getProjectSubDirectory(change *Change, patchSet *PatchSet) string {
 	projectPath := change.Project
 	if change.Branch != "" {
 		projectPath = projectPath + "/" + change.Branch
@@ -168,7 +179,7 @@ func getProjectSubDirectory(event *Event) string {
 		projectPath = projectPath + "-" + change.Topic
 	}
 	projectPath = projectPath + "-" + change.ID
-	projectPath = projectPath + "-" + strconv.Itoa(event.PatchSet.Number)
+	projectPath = projectPath + "-" + strconv.Itoa(patchSet.Number)
 	return projectPath
 }
 

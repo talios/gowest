@@ -19,11 +19,11 @@ func TestPatchSetChanges(t *testing.T) {
 }
 
 func TestProjectDirectory(t *testing.T) {
-	assertProjectPath(t, Change{Project: "test-project"}, "test-project/HEAD")
-	assertProjectPath(t, Change{Project: "test-project", Branch: "master"}, "test-project/master")
-	assertProjectPath(t, Change{Project: "test-project", Branch: "master", Topic: "my-topic"}, "test-project/master-my-topic")
+	assertProjectPath(t, Change{Project: "test-project", ID: "I1234"}, PatchSet{Number: 1}, "test-project/HEAD-I1234-1")
+	assertProjectPath(t, Change{Project: "test-project", ID: "I1234", Branch: "master"}, PatchSet{Number: 1}, "test-project/master-I1234-1")
+	assertProjectPath(t, Change{Project: "test-project", ID: "I1234", Branch: "master", Topic: "my-topic"}, PatchSet{Number: 1}, "test-project/master-my-topic-I1234-1")
 }
 
-func assertProjectPath(t *testing.T, change Change, expected string) {
-	assert.Equal(t, expected, getProjectSubDirectory(&change), "Expected path not found")
+func assertProjectPath(t *testing.T, change Change, patchSet PatchSet, expected string) {
+	assert.Equal(t, expected, getProjectSubDirectory(&change, &patchSet), "Expected path not found")
 }

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
 )
@@ -34,7 +34,8 @@ func isMavenProject(projectPath string) bool {
 func buildMaven(projectPath string, server ServerDetails, event Event, eventChannel chan Event) {
 	binary, lookErr := exec.LookPath("mvn")
 	if lookErr != nil {
-		panic(lookErr)
+		log.Warn("Unable to find maven...")
+		return
 	}
 
 	log.Printf("Found %s - building", binary)
@@ -44,7 +45,7 @@ func buildMaven(projectPath string, server ServerDetails, event Event, eventChan
 
 	if err := mvnCmd.Start(); err != nil {
 		server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Unable to start build: "+fmt.Sprint(err))
-		log.Fatal(err)
+		log.Warn(err)
 		return
 	}
 
@@ -66,11 +67,9 @@ func buildMaven(projectPath string, server ServerDetails, event Event, eventChan
 		case Success:
 			server.ReviewGerrit(event.PatchSet.Revision, "+1", "+1", "+1", "oh hai - you much legend!")
 		case Failure:
-			out, err := mvnCmd.Output()
 			message := "oh noes - you did broke it!"
-			if err == nil {
-				message = message + "\n\n\n" + string(out)
-			}
+			out, _ := mvnCmd.CombinedOutput()
+			message = message + "\n\n\n" + string(out)
 			server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", message)
 		}
 		break

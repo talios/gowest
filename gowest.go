@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -36,6 +37,8 @@ func main() {
 
 	changeEventChannelMap := make(map[string]chan Event)
 
+	var wg sync.WaitGroup
+
 	for {
 		event := <-events
 		changeEventChannel := findOrCreateProjectEventChannel(changeEventChannelMap, event)
@@ -44,17 +47,17 @@ func main() {
 		// case "comment-added":
 		// 	log.Printf("Commented added by %s: %s", event.Uploader.Email, event.Comment)
 		case "patchset-created":
-			select {
-			case changeEventChannel <- event:
-				log.WithFields(log.Fields{
-					"changeID": event.Change.ID,
-				}).Info("Triggering build")
-				// time.Sleep(5 * time.Second)
-				// case <-time.After(5 * time.Second):
-				// 	log.Info("No previous builds... building!")
-			}
+			// select {
+			// case changeEventChannel <- event:
+			// 	log.WithFields(log.Fields{
+			// 		"changeID": event.Change.ID,
+			// 	}).Info("Triggering build")
+			// 	// time.Sleep(5 * time.Second)
+			// 	// case <-time.After(5 * time.Second):
+			// 	// 	log.Info("No previous builds... building!")
+			// }
 
-			go rebuildProject(cfg, server, event, changeEventChannel)
+			go rebuildProject(cfg, server, event, changeEventChannel, &wg)
 		}
 	}
 }
@@ -79,7 +82,10 @@ func loadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event) {
+func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event, wg *sync.WaitGroup) {
+	wg.Wait()
+	wg.Add(1)
+	defer wg.Done()
 
 	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
 
@@ -125,9 +131,11 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		git(projectPath, "reset", "--hard", "HEAD")
 	}
 
-	if isMavenProject(projectPath) == true {
-		buildMaven(projectPath, server, event, eventChannel)
+	project, err := resolveProject(server, projectPath)
+	if project != nil {
+		project.buildMaven(event, eventChannel)
 	}
+
 }
 
 func getWorkspace(config *goconfig.ConfigFile) (string, error) {

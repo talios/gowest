@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gen2brain/beeep"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -92,7 +93,7 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 	reviewCommand := fmt.Sprintf("gerrit review -t gowest -m \"%s\"  --verified %s --merge %s --code-review %s %s",
 		message, verifiedScore, mergeScore, reviewScore, revision)
 
-	output, err := session.Output(reviewCommand)
+	output, err := session.CombinedOutput(reviewCommand)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -101,6 +102,8 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 
 func (s *ServerDetails) listenToGerrit(verboseMode bool) chan Event {
 	streamChannel := make(chan Event)
+
+	beeep.Notify("GoWest", "Connected to "+s.Location, "assets/information.png")
 
 	go func() {
 		session, err := connectToSSH(s.Username, s.Keyfile, s.Location)

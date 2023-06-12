@@ -4,10 +4,10 @@ go 1.19
 
 require (
 	github.com/Unknwon/goconfig v1.0.0
-	github.com/gen2brain/beeep v0.0.0-20220909211152-5a9ec94374f6
-	github.com/sirupsen/logrus v1.9.0
+	github.com/gen2brain/beeep v0.0.0-20230602101333-f384c29b62dd
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.7.1
-	golang.org/x/crypto v0.6.0
+	golang.org/x/crypto v0.9.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
 
@@ -21,6 +21,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.7.2 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
-	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/sys v0.8.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )

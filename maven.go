@@ -1,14 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 
-	// "github.com/gen2brain/beeep"
 	"github.com/gen2brain/beeep"
 	log "github.com/sirupsen/logrus"
 )
@@ -79,7 +78,7 @@ func resolvePomProject(projectPath string) (*PomProject, error) {
 		log.Error("Missing pom.xml")
 		return nil, err
 	}
-	xml, err := ioutil.ReadFile(fullPomFile)
+	xml, err := os.ReadFile(fullPomFile)
 	if err != nil {
 		log.Error("Unable to read pom.xml")
 		return nil, err
@@ -99,35 +98,18 @@ func resolvePomProjectFromString(pom string) (*PomProject, error) {
 
 }
 
-func (project *BuildProject) buildMaven(event Event, eventChannel chan Event) {
-	binary, lookErr := exec.LookPath("mvn")
-	if lookErr != nil {
-		log.Warn("Unable to find maven...")
-		return
-	}
+func (project *BuildProject) buildMaven(event Event) {
+	ctx := context.Background()
 
 	msg := "Building " + event.Project + " change " + event.Change.ID + "@" + event.PatchSet.Revision
 	beeep.Notify("GoWest", msg, "assets/information.png")
-
-	localM2Repo := fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s-%s", event.Change.ID, event.PatchSet.Revision)
-
-	log.Printf("Found %s - building", binary)
-
-	mvnCmd := exec.Command(binary, localM2Repo, "clean", "install")
-	mvnCmd.Dir = project.ProjectPath
-
-	if err := mvnCmd.Start(); err != nil {
-		project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Unable to start build: "+fmt.Sprint(err))
-		log.Warn(err)
-		return
-	}
 
 	project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Verifying build...")
 
 	processChannel := make(chan BuildProcess)
 
 	go func() {
-		if err := mvnCmd.Wait(); err != nil {
+		if err := buildWith(ctx, project, event); err != nil {
 			processChannel <- Failure
 		} else {
 			processChannel <- Success
@@ -141,16 +123,35 @@ func (project *BuildProject) buildMaven(event Event, eventChannel chan Event) {
 			project.Server.ReviewGerrit(event.PatchSet.Revision, "+1", "+1", "+1", "oh hai - you much legend!")
 		case Failure:
 			message := "oh noes - you did broke it!"
-			out, _ := mvnCmd.CombinedOutput()
-			message = message + "\n\n\n" + string(out)
+			//			out, _ := mvnCmd.CombinedOutput()
+			//			message = message + "\n\n\n" + string(out)
 			project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", message)
 		}
 		break
-	case gerritEvent := <-eventChannel:
-		if isUpdatedPatchset(event, gerritEvent) {
-			log.Printf("Cancelling build of patchset %d of change %s on project %s.", event.PatchSet.Number, event.Change.ID, event.Change.Project)
-			mvnCmd.Process.Kill()
-			// server.ReviewGerrit(event.PatchSet.Revision, "0", "0", "-1", "such sadness - much building aborted :(!")
-		}
+		//	case gerritEvent := <-eventChannel:
+		//		if isUpdatedPatchset(event, gerritEvent) {
+		//			log.Printf("Cancelling build of patchset %d of change %s on project %s.", event.PatchSet.Number, event.Change.ID, event.Change.Project)
+		//			// server.ReviewGerrit(event.PatchSet.Revision, "0", "0", "-1", "such sadness - much building aborted :(!")
+		//		}
+	}
+}
+
+func buildWith(ctx context.Context, project *BuildProject, event Event) error {
+
+	localM2Repo := fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.ID)
+
+	mvnCmd := exec.Command("mvn", localM2Repo, "clean", "verify")
+	mvnCmd.Dir = project.ProjectPath
+	mvnCmd.Stderr = os.Stderr
+	mvnCmd.Stdout = os.Stdout
+
+	if err := mvnCmd.Start(); err != nil {
+		return err
+	}
+
+	if err := mvnCmd.Wait(); err != nil {
+		return err
+	} else {
+		return nil
 	}
 }

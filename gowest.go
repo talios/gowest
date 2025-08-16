@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 	"os/exec"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Unknwon/goconfig"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -133,7 +133,7 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 
 	project, err := resolveProject(server, projectPath)
 	if project != nil {
-		project.buildMaven(event, eventChannel)
+		project.buildMaven(event)
 	}
 
 }

@@ -6,6 +6,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestBuild(t *testing.T) {
+
+	server := ServerDetails{"markd", "/Users/amrk/.ssh/id_rsa", "gerrit.smxemail.com:29418"}
+	project := BuildProject{"dev/smx3/smx3-monitoring", "1.1", "/tmp/gowest/workspace/dev/smx3/smx3-monitoring/develop-I1ed4922f4183d71442024e1c645709db36a15d1e-5", server}
+
+	event := Event{
+		PatchSet: PatchSet{Number: 29201, Revision: "3"},
+	}
+	project.buildMaven(event)
+
+}
+
 func TestPomParsing(t *testing.T) {
 
 	var xmlStr = `

@@ -1,14 +1,14 @@
 module github.com/talios/gowest
 
-go 1.25.0
+go 1.26.0
 
 require (
 	dagger.io/dagger v0.18.14
 	github.com/Unknwon/goconfig v1.0.0
-	github.com/gen2brain/beeep v0.11.1
-	github.com/sirupsen/logrus v1.9.3
-	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.41.0
+	github.com/gen2brain/beeep v0.11.2
+	github.com/sirupsen/logrus v1.10.2
+	github.com/stretchr/testify v1.12.1
+	golang.org/x/crypto v0.57.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
 
@@ -21,11 +21,11 @@ require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/esiqveland/notify v0.13.3 // indirect
+	github.com/esiqveland/notify v0.14.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
@@ -33,7 +33,7 @@ require (
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
-	github.com/sergeymakinen/go-ico v1.0.0-beta.0 // indirect
+	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.8.1 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
@@ -54,10 +54,11 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/grpc v1.74.2 // indirect

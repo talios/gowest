@@ -9,7 +9,7 @@ import (
 func TestBuild(t *testing.T) {
 
 	server := ServerDetails{"markd", "/Users/amrk/.ssh/id_rsa", "gerrit.smxemail.com:29418"}
-	project := BuildProject{"dev/smx3/smx3-monitoring", "1.1", "/tmp/gowest/workspace/dev/smx3/smx3-monitoring/develop-I1ed4922f4183d71442024e1c645709db36a15d1e-5", server}
+	project := BuildProject{Name: "dev/smx3/smx3-monitoring", Version: "1.1", ProjectPath: "/tmp/gowest/workspace/dev/smx3/smx3-monitoring/develop-I1ed4922f4183d71442024e1c645709db36a15d1e-5", Server: server}
 
 	event := Event{
 		PatchSet: PatchSet{Number: 29201, Revision: "3"},

@@ -7,16 +7,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
+	"github.com/Unknwon/goconfig"
 	"github.com/gen2brain/beeep"
 	log "github.com/sirupsen/logrus"
 )
 
 type BuildProject struct {
-	Name        string
-	Version     string
-	ProjectPath string
-	Server      ServerDetails
+	Name         string
+	Version      string
+	ProjectPath  string
+	RepoType     string
+	BuildCommand string
+	Server       ServerDetails
 }
 
 type MavenProject struct {
@@ -54,12 +58,33 @@ func isGitRepo(projectPath string) bool {
 	return false
 }
 
-func resolveProject(server ServerDetails, projectPath string) (*BuildProject, error) {
+// resolveProject reads the project's build settings from its config section, e.g. [project.foo].
+func resolveProject(config *goconfig.ConfigFile, projectKey string, server ServerDetails, projectPath string) (*BuildProject, error) {
 	if isMavenProject(projectPath) {
+
 		pomProject, err := resolvePomProject(projectPath)
+		if err != nil {
+			return nil, err
+		}
+
+		defaultType := "local"
+		repoType, err := config.GetValue(projectKey, "repo")
+
+		if err != nil {
+			repoType = defaultType
+		}
+
+		defaultBuildCommand := "mvnd clean verify"
+		buildCommand, err := config.GetValue(projectKey, "build-command")
+
+		if err != nil {
+			buildCommand = defaultBuildCommand
+		}
+
 		return &BuildProject{
-			Name: pomProject.Name, Version: pomProject.Version, ProjectPath: projectPath, Server: server,
-		}, err
+			Name: pomProject.Name, Version: pomProject.Version, ProjectPath: projectPath,
+			RepoType: repoType, BuildCommand: buildCommand, Server: server,
+		}, nil
 	}
 	return nil, errors.New("unknown project type")
 }
@@ -138,9 +163,23 @@ func (project *BuildProject) buildMaven(event Event) {
 
 func buildWith(ctx context.Context, project *BuildProject, event Event) error {
 
-	localM2Repo := fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.ID)
+	commandParts := strings.Fields(project.BuildCommand)
+	if len(commandParts) == 0 {
+		return errors.New("empty build command")
+	}
 
-	mvnCmd := exec.Command("mvn", localM2Repo, "clean", "verify")
+	// The "local" repo type passes no flag, leaving maven to use its own default (or whatever
+	// localRepository settings.xml specifies). The command runs without a shell, so a "~" path
+	// here would never be expanded.
+	var args []string
+	if project.RepoType == "project" {
+		args = append(args, fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", project.Name))
+	}
+	if project.RepoType == "change" {
+		args = append(args, fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.ID))
+	}
+	args = append(args, commandParts[1:]...)
+	mvnCmd := exec.Command(commandParts[0], args...)
 	mvnCmd.Dir = project.ProjectPath
 	mvnCmd.Stderr = os.Stderr
 	mvnCmd.Stdout = os.Stdout

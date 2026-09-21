@@ -3,10 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 	"os/exec"
 	"strconv"
+
+	"gopkg.in/alecthomas/kingpin.v2"
 
 	log "github.com/sirupsen/logrus"
 
@@ -52,6 +53,9 @@ func main() {
 			case changeEventChannel <- event:
 				log.WithFields(log.Fields{
 					"changeID": event.Change.ID,
+					"email":    event.Change.Owner.Email,
+					"username": event.Change.Owner.Username,
+					"project":  event.Change.Project,
 				}).Info("Queued build")
 			default:
 				log.WithFields(log.Fields{
@@ -140,7 +144,7 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 		git(projectPath, "reset", "--hard", "HEAD")
 	}
 
-	project, err := resolveProject(server, projectPath)
+	project, err := resolveProject(config, projectKey, server, projectPath)
 	if project != nil {
 		project.buildMaven(event)
 	}

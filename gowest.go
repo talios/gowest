@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"sync"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Unknwon/goconfig"
 )
+
+// projectQueueSize bounds how many pending patchsets we hold per project before dropping.
+const projectQueueSize = 16
 
 var (
 	verboseMode = kingpin.Flag("verbose", "Run in verbose mode.").Short('v').Bool()
@@ -37,41 +39,52 @@ func main() {
 
 	changeEventChannelMap := make(map[string]chan Event)
 
-	var wg sync.WaitGroup
-
 	for {
 		event := <-events
-		changeEventChannel := findOrCreateProjectEventChannel(changeEventChannelMap, event)
 
 		switch event.Type {
 		// case "comment-added":
 		// 	log.Printf("Commented added by %s: %s", event.Uploader.Email, event.Comment)
 		case "patchset-created":
-			// select {
-			// case changeEventChannel <- event:
-			// 	log.WithFields(log.Fields{
-			// 		"changeID": event.Change.ID,
-			// 	}).Info("Triggering build")
-			// 	// time.Sleep(5 * time.Second)
-			// 	// case <-time.After(5 * time.Second):
-			// 	// 	log.Info("No previous builds... building!")
-			// }
+			changeEventChannel := findOrCreateProjectEventChannel(changeEventChannelMap, cfg, server, event)
 
-			go rebuildProject(cfg, server, event, changeEventChannel, &wg)
+			select {
+			case changeEventChannel <- event:
+				log.WithFields(log.Fields{
+					"changeID": event.Change.ID,
+				}).Info("Queued build")
+			default:
+				log.WithFields(log.Fields{
+					"changeID": event.Change.ID,
+					"project":  event.Change.Project,
+				}).Warn("Build queue full, dropping event")
+			}
 		}
 	}
 }
 
 /*
- * Lookup an event channel based on the Event's project, if not existing in the map - create one and insert
+ * Lookup an event channel based on the Event's project, if not existing in the map - create one,
+ * insert it, and start the worker goroutine that builds that project's events one at a time.
  */
-func findOrCreateProjectEventChannel(projectEventChannelMap map[string]chan Event, event Event) chan Event {
+func findOrCreateProjectEventChannel(projectEventChannelMap map[string]chan Event, config *goconfig.ConfigFile, server ServerDetails, event Event) chan Event {
 	projectEventChannel, exists := projectEventChannelMap[event.Change.Project]
 	if !exists {
-		projectEventChannel = make(chan Event)
+		projectEventChannel = make(chan Event, projectQueueSize)
 		projectEventChannelMap[event.Change.Project] = projectEventChannel
+		go buildProjectEvents(config, server, projectEventChannel)
 	}
 	return projectEventChannel
+}
+
+/*
+ * Serially build every event for a single project - one worker per project means builds of the
+ * same project never overlap, while different projects still build concurrently.
+ */
+func buildProjectEvents(config *goconfig.ConfigFile, server ServerDetails, events chan Event) {
+	for event := range events {
+		rebuildProject(config, server, event)
+	}
 }
 
 func loadConfig() (*goconfig.ConfigFile, error) {
@@ -82,11 +95,7 @@ func loadConfig() (*goconfig.ConfigFile, error) {
 	return cfg, nil
 }
 
-func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event, eventChannel chan Event, wg *sync.WaitGroup) {
-	wg.Wait()
-	wg.Add(1)
-	defer wg.Done()
-
+func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Event) {
 	projectKey := fmt.Sprintf("project.%s", event.Change.Project)
 
 	projectLogger := log.WithFields(log.Fields{

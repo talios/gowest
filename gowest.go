@@ -149,9 +149,11 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 	}
 
 	project, err := resolveProject(config, projectKey, server, projectPath)
-	if project != nil {
-		project.buildMaven(event)
+	if err != nil {
+		projectPathLogger.WithError(err).WithField("changeID", event.Change.ID).Error("Unable to resolve project, skipping build")
+		return
 	}
+	project.buildMaven(event)
 
 }
 

@@ -151,8 +151,7 @@ func rebuildProject(config *goconfig.ConfigFile, server ServerDetails, event Eve
 	project, err := resolveProject(config, projectKey, server, projectPath)
 	if err != nil {
 		projectPathLogger.WithError(err).WithField("changeID", event.Change.ID).Error("Unable to resolve project, skipping build")
-		// The error stays in the log: it can contain quotes that would break the gerrit review command.
-		server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", "couldn't work out how to build this project - check the gowest logs")
+		server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", "couldn't work out how to build this project: "+err.Error())
 		return
 	}
 	project.buildMaven(event)

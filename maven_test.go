@@ -146,6 +146,7 @@ func TestErrorLineCollectorDropsMavenBoilerplate(t *testing.T) {
 	output := `[ERROR] COMPILATION ERROR :
 [ERROR] /src/main/java/Foo.java:[12,5] cannot find symbol
 [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project foo: Compilation failure -> [Help 1]
+[ERROR] -> [Help 1]
 [ERROR] 
 [ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
 [ERROR] Re-run Maven using the -X switch to enable full debug logging.

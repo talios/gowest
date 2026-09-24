@@ -334,6 +334,10 @@ func (c *errorLineCollector) addIfError(line string) {
 		return
 	}
 	line = mavenHelpSuffix.ReplaceAllString(line, "")
+	if line == "[ERROR]" {
+		// mvnd prints "-> [Help 1]" on a line of its own.
+		return
+	}
 	// Count the indent and newline formatPreformatted adds, so maxBytes bounds the message itself.
 	size := len(line) + 5
 	half := c.maxBytes / 2

@@ -9,7 +9,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -158,7 +160,8 @@ func (project *BuildProject) buildMaven(event Event) {
 			if summary := output.failureSummary(); summary != "" {
 				message += "\n\n" + summary
 			}
-			project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", message)
+			comments := inlineComments(project.ProjectPath, event.PatchSet.Revision, output.compileErrors.list())
+			project.Server.ReviewGerritWithComments(event.PatchSet.Revision, "0", "-1", "-1", message, comments)
 		}
 		break
 		//	case gerritEvent := <-eventChannel:
@@ -214,6 +217,8 @@ const (
 	buildErrorLinesBytes = 8 * 1024
 	// Longer lines are cut short, so no single line can use up the error budget.
 	maxBuildLineBytes = 500
+	// Beyond this many compile errors the rest are usually knock-on errors, so aren't commented on.
+	maxCompileErrors = 50
 )
 
 // buildOutput captures what the review needs from a build's output: the [ERROR] lines, and the
@@ -221,17 +226,23 @@ const (
 type buildOutput struct {
 	tail           *tailWriter
 	errors         *errorLineCollector
+	compileErrors  *compileErrorCollector
 	stdout, stderr *lineWriter
 }
 
 func newBuildOutput() *buildOutput {
 	o := &buildOutput{
-		tail:   newTailWriter(buildOutputTailBytes),
-		errors: newErrorLineCollector(buildErrorLinesBytes),
+		tail:          newTailWriter(buildOutputTailBytes),
+		errors:        newErrorLineCollector(buildErrorLinesBytes),
+		compileErrors: &compileErrorCollector{seen: map[string]bool{}},
+	}
+	onLine := func(line string) {
+		o.errors.addIfError(line)
+		o.compileErrors.add(line)
 	}
 	// stdout and stderr each get their own lineWriter, so lines from the two never interleave.
-	o.stdout = &lineWriter{onLine: o.errors.addIfError}
-	o.stderr = &lineWriter{onLine: o.errors.addIfError}
+	o.stdout = &lineWriter{onLine: onLine}
+	o.stderr = &lineWriter{onLine: onLine}
 	return o
 }
 
@@ -312,8 +323,14 @@ func newErrorLineCollector(maxBytes int) *errorLineCollector {
 	return &errorLineCollector{maxBytes: maxBytes}
 }
 
+// cleanBuildLine strips colour codes, invalid UTF-8 and trailing whitespace from a line of output.
+func cleanBuildLine(line string) string {
+	return strings.TrimRight(strings.ToValidUTF8(ansiEscape.ReplaceAllString(line, ""), ""), "\r \t")
+}
+
+// addIfError collects line if it is a maven [ERROR] line.
 func (c *errorLineCollector) addIfError(line string) {
-	line = strings.TrimRight(strings.ToValidUTF8(ansiEscape.ReplaceAllString(line, ""), ""), "\r \t")
+	line = cleanBuildLine(line)
 	if !strings.HasPrefix(line, "[ERROR]") || line == "[ERROR]" {
 		return
 	}
@@ -460,4 +477,154 @@ func formatPreformatted(lines []string) string {
 		formatted.WriteString("\n")
 	}
 	return formatted.String()
+}
+
+// compileError is a compiler error against a file and line, e.g. javac's
+// "[ERROR] /path/Foo.java:[18,31] cannot find symbol", with any detail lines that follow it.
+type compileError struct {
+	path    string
+	line    int
+	message string
+	details []string
+}
+
+var (
+	compileErrorLine = regexp.MustCompile(`^\[ERROR\] (/.+?):\[(\d+),(\d+)\] (.+)$`)
+	// javac's "  symbol: ..." and "  location: ..." lines, with or without an [ERROR] prefix.
+	compileErrorDetail = regexp.MustCompile(`^(?:\[ERROR\])?\s{2,}(\S.*)$`)
+)
+
+/*
+ * compileErrorCollector collects compile errors from a build's output. Maven reports each one
+ * twice - as the compiler runs and again in its failure summary - so repeats are dropped.
+ */
+type compileErrorCollector struct {
+	mu     sync.Mutex
+	errors []*compileError
+	seen   map[string]bool
+	// The error that detail lines belong to; nil after any other line, or after a repeat.
+	current *compileError
+}
+
+// add collects line if it is part of a compile error.
+func (c *compileErrorCollector) add(line string) {
+	line = cleanBuildLine(line)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if m := compileErrorLine.FindStringSubmatch(line); m != nil {
+		c.current = nil
+		key := strings.Join(m[1:], ":")
+		if c.seen[key] || len(c.errors) >= maxCompileErrors {
+			return
+		}
+		c.seen[key] = true
+		lineNumber, _ := strconv.Atoi(m[2])
+		c.current = &compileError{path: m[1], line: lineNumber, message: m[4]}
+		c.errors = append(c.errors, c.current)
+		return
+	}
+	if m := compileErrorDetail.FindStringSubmatch(line); m != nil && c.current != nil {
+		c.current.details = append(c.current.details, m[1])
+		return
+	}
+	c.current = nil
+}
+
+func (c *compileErrorCollector) list() []compileError {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	errors := make([]compileError, len(c.errors))
+	for i, e := range c.errors {
+		errors[i] = *e
+		errors[i].details = append([]string(nil), e.details...)
+	}
+	return errors
+}
+
+// commentMessage formats the error for an inline comment, with its details preformatted.
+func (e compileError) commentMessage() string {
+	if len(e.details) == 0 {
+		return e.message
+	}
+	return e.message + "\n\n" + strings.TrimRight(formatPreformatted(e.details), "\n")
+}
+
+/*
+ * Turn compile errors into inline comments on the revision being reviewed, keyed by path within
+ * the repository. Gerrit rejects the whole review if a comment is on a file the revision doesn't
+ * change, and the build ran on the revision merged with its branch, so an error only becomes a
+ * comment when the revision changes its file and the build compiled the revision's version of it.
+ * Anything else is only reported in the review message.
+ */
+func inlineComments(projectPath string, revision string, errors []compileError) map[string][]reviewComment {
+	if len(errors) == 0 {
+		return nil
+	}
+	logger := log.WithFields(log.Fields{"path": projectPath, "revision": revision})
+
+	// Maven reports paths with symlinks resolved, e.g. /private/tmp rather than /tmp on macOS.
+	root, err := filepath.EvalSymlinks(projectPath)
+	if err != nil {
+		logger.WithError(err).Warn("Unable to resolve project path, skipping inline comments")
+		return nil
+	}
+	changed, err := revisionChangedFiles(projectPath, revision)
+	if err != nil {
+		logger.WithError(err).Warn("Unable to list files changed by revision, skipping inline comments")
+		return nil
+	}
+
+	comments := map[string][]reviewComment{}
+	builtFromRevision := map[string]bool{}
+	for _, e := range errors {
+		path, err := filepath.EvalSymlinks(e.path)
+		if err != nil {
+			continue
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			continue
+		}
+		relative = filepath.ToSlash(relative)
+		if !changed[relative] {
+			continue
+		}
+		same, checked := builtFromRevision[relative]
+		if !checked {
+			// The merge with the branch may have changed the file, and with it the line numbers.
+			_, err := gitOutput(projectPath, "diff", "--quiet", revision, "--", relative)
+			same = err == nil
+			builtFromRevision[relative] = same
+		}
+		if same {
+			comments[relative] = append(comments[relative], reviewComment{Line: e.line, Message: e.commentMessage(), Unresolved: true})
+		}
+	}
+	return comments
+}
+
+/*
+ * List the files a revision changes against its parent - the files gerrit accepts comments on.
+ * Merge commits are refused: gerrit compares those against an auto-merge rather than a parent.
+ */
+func revisionChangedFiles(projectPath string, revision string) (map[string]bool, error) {
+	parents, err := gitOutput(projectPath, "rev-list", "--parents", "-n", "1", revision)
+	if err != nil {
+		return nil, err
+	}
+	if len(strings.Fields(parents)) != 2 {
+		return nil, fmt.Errorf("revision %s does not have exactly one parent", revision)
+	}
+
+	names, err := gitOutput(projectPath, "diff", "--name-only", "--no-renames", "-z", revision+"^", revision)
+	if err != nil {
+		return nil, err
+	}
+	changed := map[string]bool{}
+	for _, name := range strings.Split(names, "\x00") {
+		if name != "" {
+			changed[name] = true
+		}
+	}
+	return changed, nil
 }

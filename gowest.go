@@ -218,6 +218,14 @@ func getProjectSubDirectory(change *Change, patchSet *PatchSet) string {
 	return projectPath
 }
 
+// gitOutput runs git in projectPath and returns its standard output.
+func gitOutput(projectPath string, args ...string) (string, error) {
+	gitCmd := exec.Command("git", args...)
+	gitCmd.Dir = projectPath
+	output, err := gitCmd.Output()
+	return string(output), err
+}
+
 func git(projectPath string, args ...string) error {
 	// Check Git is installed and on the path
 	binary, lookErr := exec.LookPath("git")

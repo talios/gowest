@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +95,25 @@ type reviewRequest struct {
 	revision string
 	message  string
 	command  string
+	// stdin, when set, is sent to the command - the review input for gerrit review --json.
+	stdin []byte
+}
+
+// reviewComment is an inline comment on a line of a file in the revision being reviewed.
+type reviewComment struct {
+	Line       int    `json:"line"`
+	Message    string `json:"message"`
+	Unresolved bool   `json:"unresolved"`
+}
+
+// reviewInput is gerrit's ReviewInput, as read by gerrit review --json.
+type reviewInput struct {
+	Message  string                     `json:"message,omitempty"`
+	Tag      string                     `json:"tag"`
+	Labels   map[string]int             `json:"labels"`
+	Comments map[string][]reviewComment `json:"comments,omitempty"`
+	// Skips comments identical to ones already posted, e.g. when a patchset is rebuilt.
+	OmitDuplicateComments bool `json:"omit_duplicate_comments"`
 }
 
 const (
@@ -118,10 +139,27 @@ func (s *ServerDetails) startReviewWorker() {
 // ReviewGerrit queues a score and message for a given gerrit revision. It only blocks if the
 // review queue is full; without a review worker it posts the review synchronously.
 func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifiedScore string, mergeScore string, message string) {
+	s.ReviewGerritWithComments(revision, reviewScore, verifiedScore, mergeScore, message, nil)
+}
+
+// ReviewGerritWithComments is ReviewGerrit plus inline comments, keyed by file path relative to
+// the repository root. Every path must be a file the revision changes, or gerrit rejects the
+// whole review.
+func (s *ServerDetails) ReviewGerritWithComments(revision string, reviewScore string, verifiedScore string, mergeScore string, message string, comments map[string][]reviewComment) {
 	request := reviewRequest{
 		revision: revision,
 		message:  message,
 		command:  reviewCommand(revision, reviewScore, verifiedScore, mergeScore, message),
+	}
+	if len(comments) > 0 {
+		stdin, err := reviewJSON(reviewScore, verifiedScore, mergeScore, message, comments)
+		if err != nil {
+			log.WithError(err).WithField("revision", revision).Error("Unable to build review json, posting without inline comments")
+		} else {
+			// Gerrit refuses -m and --tag alongside --json, so everything goes in the json.
+			request.command = "gerrit review --json " + revision
+			request.stdin = stdin
+		}
 	}
 
 	if s.reviews == nil {
@@ -129,6 +167,26 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 		return
 	}
 	s.reviews <- request
+}
+
+// reviewJSON builds the input for gerrit review --json. Gerrit matches label names case-insensitively,
+// so these match the --code-review, --verified and --merge options reviewCommand uses.
+func reviewJSON(reviewScore string, verifiedScore string, mergeScore string, message string, comments map[string][]reviewComment) ([]byte, error) {
+	labels := map[string]int{}
+	for label, score := range map[string]string{"Code-Review": reviewScore, "Verified": verifiedScore, "Merge": mergeScore} {
+		value, err := strconv.Atoi(score)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s score %q: %w", label, score, err)
+		}
+		labels[label] = value
+	}
+	return json.Marshal(reviewInput{
+		Message:               message,
+		Tag:                   "gowest",
+		Labels:                labels,
+		Comments:              comments,
+		OmitDuplicateComments: true,
+	})
 }
 
 // reviewCommand builds the gerrit review command line for a revision.
@@ -160,7 +218,7 @@ func (s *ServerDetails) sendReview(request reviewRequest) {
 
 	delay := initialReviewDelay
 	for attempt := 1; ; attempt++ {
-		output, err := s.postReview(request.command)
+		output, err := s.postReview(request.command, request.stdin)
 		if err == nil {
 			log.Printf("%s: %s", string(output), request.message)
 			return
@@ -188,7 +246,7 @@ func (s *ServerDetails) sendReview(request reviewRequest) {
 }
 
 // postReview makes a single attempt at running the gerrit review command.
-func (s *ServerDetails) postReview(reviewCommand string) ([]byte, error) {
+func (s *ServerDetails) postReview(reviewCommand string, stdin []byte) ([]byte, error) {
 	client, session, err := connectToSSH(s.Username, s.Keyfile, s.Location)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create session: %w", err)
@@ -197,6 +255,9 @@ func (s *ServerDetails) postReview(reviewCommand string) ([]byte, error) {
 	defer client.Close()
 	defer session.Close()
 
+	if stdin != nil {
+		session.Stdin = bytes.NewReader(stdin)
+	}
 	return session.CombinedOutput(reviewCommand)
 }
 

@@ -77,3 +77,20 @@ func TestReviewCommandOmitsEmptyMessage(t *testing.T) {
 	assert.Equal(t, []string{"gerrit", "review", "-t", "gowest",
 		"--verified", "+1", "--merge", "+1", "--code-review", "+1", "abc123"}, args)
 }
+
+func TestReviewJSON(t *testing.T) {
+	input, err := reviewJSON("0", "-1", "+1", "it broke", map[string][]reviewComment{
+		"src/Foo.java": {{Line: 18, Message: "cannot find symbol", Unresolved: true}},
+	})
+	assert.NoError(t, err)
+	assert.JSONEq(t, `{
+		"message": "it broke",
+		"tag": "gowest",
+		"labels": {"Code-Review": 0, "Verified": -1, "Merge": 1},
+		"comments": {"src/Foo.java": [{"line": 18, "message": "cannot find symbol", "unresolved": true}]},
+		"omit_duplicate_comments": true
+	}`, string(input))
+
+	_, err = reviewJSON("0", "nope", "0", "x", nil)
+	assert.Error(t, err)
+}

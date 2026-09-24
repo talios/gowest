@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gen2brain/beeep"
@@ -120,8 +121,7 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 	request := reviewRequest{
 		revision: revision,
 		message:  message,
-		command: fmt.Sprintf("gerrit review -t gowest -m \"%s\"  --verified %s --merge %s --code-review %s %s",
-			message, verifiedScore, mergeScore, reviewScore, revision),
+		command:  reviewCommand(revision, reviewScore, verifiedScore, mergeScore, message),
 	}
 
 	if s.reviews == nil {
@@ -129,6 +129,26 @@ func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifi
 		return
 	}
 	s.reviews <- request
+}
+
+// reviewCommand builds the gerrit review command line for a revision.
+func reviewCommand(revision string, reviewScore string, verifiedScore string, mergeScore string, message string) string {
+	command := "gerrit review -t gowest"
+	// Gerrit drops empty arguments, so an empty -m would swallow the next flag as the message.
+	if message != "" {
+		command += " -m " + quoteGerritArg(message)
+	}
+	return fmt.Sprintf("%s --verified %s --merge %s --code-review %s %s",
+		command, verifiedScore, mergeScore, reviewScore, revision)
+}
+
+/*
+ * Quote a value as a single argument for a gerrit ssh command. Gerrit splits the command line
+ * itself rather than using a shell: everything inside single quotes is literal, and outside quotes
+ * a backslash escapes the next character, so each ' is written as '\'' (close, escaped quote, reopen).
+ */
+func quoteGerritArg(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 // sendReview posts a review, retrying with exponential backoff if gerrit cannot be reached.

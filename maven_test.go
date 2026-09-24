@@ -84,13 +84,60 @@ func TestFormatBuildOutputTail(t *testing.T) {
 func TestBuildWithCapturesOutputOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "build.sh")
-	os.WriteFile(script, []byte("#!/bin/sh\necho \"[INFO] compiling\"\necho \"[ERROR] it broke\" >&2\nexit 1\n"), 0755)
+	os.WriteFile(script, []byte("#!/bin/sh\necho \"[INFO] compiling\"\necho \"[ERROR] it broke\"\necho \"sh: oops\" >&2\nprintf \"[ERROR] no newline\"\nexit 1\n"), 0755)
 
 	project := &BuildProject{Name: "test", ProjectPath: dir, RepoType: "local", BuildCommand: script}
-	output := newTailWriter(buildOutputTailBytes)
+	output := newBuildOutput()
 	err := buildWith(context.Background(), project, Event{}, output)
 
 	assert.Error(t, err)
-	assert.Contains(t, output.String(), "[INFO] compiling")
-	assert.Contains(t, output.String(), "[ERROR] it broke")
+	assert.Equal(t, "Errors from build output:\n\n    [ERROR] it broke\n    [ERROR] no newline\n", output.failureSummary())
+}
+
+func TestFailureSummaryFallsBackToTail(t *testing.T) {
+	output := newBuildOutput()
+	fmt.Fprint(output.stdoutWriter(), "[INFO] compiling\ncommand not found\n")
+	output.flush()
+	assert.Equal(t, "Last lines of build output:\n\n    [INFO] compiling\n    command not found\n", output.failureSummary())
+
+	assert.Equal(t, "", newBuildOutput().failureSummary())
+}
+
+func TestLineWriterHandlesSplitAndColouredLines(t *testing.T) {
+	c := newErrorLineCollector(1024)
+	w := &lineWriter{onLine: c.addIfError}
+	w.Write([]byte("[INFO] fine\n[ERR"))
+	w.Write([]byte("OR] split across writes\r\n\x1b[1;31m[ERROR]\x1b[m coloured\n[ERROR]\n[ERROR] "))
+	w.Write([]byte("\n[WARNING] not an error\n"))
+	w.flush()
+	assert.Equal(t, []string{"[ERROR] split across writes", "[ERROR] coloured"}, c.lines())
+}
+
+func TestLineWriterTruncatesLongLines(t *testing.T) {
+	c := newErrorLineCollector(4096)
+	w := &lineWriter{onLine: c.addIfError}
+	fmt.Fprintf(w, "[ERROR] %s\n", strings.Repeat("x", 2000))
+	assert.Len(t, c.lines()[0], maxBuildLineBytes)
+}
+
+func TestErrorLineCollectorKeepsHeadAndTail(t *testing.T) {
+	c := newErrorLineCollector(200)
+	for i := 0; i < 100; i++ {
+		c.addIfError(fmt.Sprintf("[ERROR] line %02d", i))
+	}
+	lines := c.lines()
+	assert.Equal(t, "[ERROR] line 00", lines[0])
+	assert.Equal(t, "[ERROR] line 99", lines[len(lines)-1])
+
+	var marker string
+	kept := 0
+	for _, line := range lines {
+		if strings.HasPrefix(line, "...") {
+			marker = line
+		} else {
+			kept++
+		}
+	}
+	assert.Equal(t, fmt.Sprintf("... %d more [ERROR] lines ...", 100-kept), marker)
+	assert.LessOrEqual(t, len(formatPreformatted(lines)), 200+len(marker)+5)
 }

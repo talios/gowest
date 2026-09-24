@@ -1,6 +1,12 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,4 +45,52 @@ func TestPomParsing(t *testing.T) {
 	pomProject, _ := resolvePomProjectFromString(xmlStr)
 	assert.Equal(t, pomProject.ArtifactId, "selfrelease", "Invalid artifact id")
 
+}
+
+func TestTailWriterKeepsLastCompleteLines(t *testing.T) {
+	w := newTailWriter(64)
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(w, "line %03d\n", i)
+	}
+	tail := w.String()
+	assert.LessOrEqual(t, len(tail), 64)
+	assert.True(t, strings.HasPrefix(tail, "line "), "tail should start on a complete line: %q", tail)
+	assert.True(t, strings.HasSuffix(tail, "line 099\n"))
+}
+
+func TestTailWriterConcurrentWrites(t *testing.T) {
+	w := newTailWriter(1024)
+	var wg sync.WaitGroup
+	for g := 0; g < 4; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 1000; i++ {
+				w.Write([]byte("output\n"))
+			}
+		}()
+	}
+	wg.Wait()
+	assert.LessOrEqual(t, len(w.String()), 1024)
+}
+
+func TestFormatBuildOutputTail(t *testing.T) {
+	output := "\n[INFO] one\r\n\x1b[1;31m[ERROR]\x1b[m two\n\n[ERROR] three  \n\n\n"
+	assert.Equal(t, "    [INFO] one\n    [ERROR] two\n\n    [ERROR] three\n", formatBuildOutputTail(output, 10))
+	assert.Equal(t, "    [ERROR] two\n\n    [ERROR] three\n", formatBuildOutputTail(output, 3))
+	assert.Equal(t, "", formatBuildOutputTail("\n  \n", 10))
+}
+
+func TestBuildWithCapturesOutputOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "build.sh")
+	os.WriteFile(script, []byte("#!/bin/sh\necho \"[INFO] compiling\"\necho \"[ERROR] it broke\" >&2\nexit 1\n"), 0755)
+
+	project := &BuildProject{Name: "test", ProjectPath: dir, RepoType: "local", BuildCommand: script}
+	output := newTailWriter(buildOutputTailBytes)
+	err := buildWith(context.Background(), project, Event{}, output)
+
+	assert.Error(t, err)
+	assert.Contains(t, output.String(), "[INFO] compiling")
+	assert.Contains(t, output.String(), "[ERROR] it broke")
 }

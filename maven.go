@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/Unknwon/goconfig"
 	"github.com/gen2brain/beeep"
@@ -132,9 +136,12 @@ func (project *BuildProject) buildMaven(event Event) {
 	project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Verifying build...")
 
 	processChannel := make(chan BuildProcess)
+	output := newTailWriter(buildOutputTailBytes)
+	var buildErr error
 
 	go func() {
-		if err := buildWith(ctx, project, event); err != nil {
+		// buildErr and output are only read after the channel receive below.
+		if buildErr = buildWith(ctx, project, event, output); buildErr != nil {
 			processChannel <- Failure
 		} else {
 			processChannel <- Success
@@ -147,9 +154,10 @@ func (project *BuildProject) buildMaven(event Event) {
 		case Success:
 			project.Server.ReviewGerrit(event.PatchSet.Revision, "+1", "+1", "+1", "oh hai - you much legend!")
 		case Failure:
-			message := "oh noes - you did broke it!"
-			//			out, _ := mvnCmd.CombinedOutput()
-			//			message = message + "\n\n\n" + string(out)
+			message := "oh noes - you did broke it!\n\n" + buildErr.Error()
+			if tail := formatBuildOutputTail(output.String(), buildOutputTailLines); tail != "" {
+				message += "\n\nLast lines of build output:\n\n" + tail
+			}
 			project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "-1", message)
 		}
 		break
@@ -161,7 +169,8 @@ func (project *BuildProject) buildMaven(event Event) {
 	}
 }
 
-func buildWith(ctx context.Context, project *BuildProject, event Event) error {
+// buildWith runs the project's build command, copying its output to both the terminal and output.
+func buildWith(ctx context.Context, project *BuildProject, event Event, output io.Writer) error {
 
 	commandParts := strings.Fields(project.BuildCommand)
 	if len(commandParts) == 0 {
@@ -181,8 +190,8 @@ func buildWith(ctx context.Context, project *BuildProject, event Event) error {
 	args = append(args, commandParts[1:]...)
 	mvnCmd := exec.Command(commandParts[0], args...)
 	mvnCmd.Dir = project.ProjectPath
-	mvnCmd.Stderr = os.Stderr
-	mvnCmd.Stdout = os.Stdout
+	mvnCmd.Stderr = io.MultiWriter(os.Stderr, output)
+	mvnCmd.Stdout = io.MultiWriter(os.Stdout, output)
 
 	if err := mvnCmd.Start(); err != nil {
 		return err
@@ -193,4 +202,81 @@ func buildWith(ctx context.Context, project *BuildProject, event Event) error {
 	} else {
 		return nil
 	}
+}
+
+const (
+	// Gerrit rejects messages over change.commentSizeLimit (16KB by default), so only the end
+	// of the build output - where maven prints its [ERROR] summary - goes into the review.
+	buildOutputTailBytes = 8 * 1024
+	buildOutputTailLines = 60
+)
+
+// tailWriter keeps only the last maxBytes written to it. It is safe for concurrent writes, as
+// the build's stdout and stderr are copied into the same tailWriter.
+type tailWriter struct {
+	mu       sync.Mutex
+	maxBytes int
+	buf      []byte
+}
+
+func newTailWriter(maxBytes int) *tailWriter {
+	return &tailWriter{maxBytes: maxBytes}
+}
+
+func (w *tailWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	// Trim only once the buffer doubles, so large outputs aren't copied on every write.
+	if len(w.buf) > 2*w.maxBytes {
+		w.buf = append([]byte(nil), w.buf[len(w.buf)-w.maxBytes:]...)
+	}
+	return len(p), nil
+}
+
+func (w *tailWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.buf) <= w.maxBytes {
+		return string(w.buf)
+	}
+	tail := w.buf[len(w.buf)-w.maxBytes:]
+	// The cut usually lands mid-line, so start from the first complete line.
+	if i := bytes.IndexByte(tail, '\n'); i >= 0 {
+		tail = tail[i+1:]
+	}
+	return string(tail)
+}
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+
+/*
+ * Format the last maxLines of build output for a gerrit message: colour codes are stripped, and
+ * each line is indented so gerrit renders the block as preformatted text. Returns "" when there
+ * is no output.
+ */
+func formatBuildOutputTail(output string, maxLines int) string {
+	output = strings.ToValidUTF8(ansiEscape.ReplaceAllString(output, ""), "")
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, "\r \t")
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	for len(lines) > 0 && lines[0] == "" {
+		lines = lines[1:]
+	}
+
+	var formatted strings.Builder
+	for _, line := range lines {
+		if line != "" {
+			formatted.WriteString("    " + line)
+		}
+		formatted.WriteString("\n")
+	}
+	return formatted.String()
 }

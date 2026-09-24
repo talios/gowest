@@ -356,12 +356,14 @@ func (c *errorLineCollector) addIfError(line string) {
 }
 
 var (
-	// Lines maven prints after every failure, which say nothing about this build's errors.
+	// Lines maven logs as errors that say nothing about why this build failed: the advice printed
+	// after every failure, and the per-module reproducible build warning.
 	mavenBoilerplate = []*regexp.Regexp{
 		regexp.MustCompile(`^To see the full stack trace of the errors, re-run Maven with the`),
 		regexp.MustCompile(`^Re-run Maven using the '?-X'? switch`),
 		regexp.MustCompile(`^For more information about the errors and possible solutions, please read the following articles`),
 		regexp.MustCompile(`^\[Help \d+\] `),
+		regexp.MustCompile(`^Reproducible Build not activated by project\.build\.outputTimestamp property`),
 	}
 	mavenResumeHint = regexp.MustCompile(`^After correcting the problems, you can resume the build with the command`)
 	mavenHelpSuffix = regexp.MustCompile(`\s*-> \[Help \d+\]$`)

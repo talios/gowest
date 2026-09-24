@@ -143,7 +143,9 @@ func TestErrorLineCollectorKeepsHeadAndTail(t *testing.T) {
 }
 
 func TestErrorLineCollectorDropsMavenBoilerplate(t *testing.T) {
-	output := `[ERROR] COMPILATION ERROR :
+	output := `[ERROR] Reproducible Build not activated by project.build.outputTimestamp property: see https://maven.apache.org/guides/mini/guide-reproducible-builds.html
+[ERROR] Reproducible Build not activated by project.build.outputTimestamp property: see https://maven.apache.org/guides/mini/guide-reproducible-builds.html
+[ERROR] COMPILATION ERROR :
 [ERROR] /src/main/java/Foo.java:[12,5] cannot find symbol
 [ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project foo: Compilation failure -> [Help 1]
 [ERROR] -> [Help 1]

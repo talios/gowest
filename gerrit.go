@@ -97,6 +97,8 @@ type reviewRequest struct {
 	command  string
 	// stdin, when set, is sent to the command - the review input for gerrit review --json.
 	stdin []byte
+	// plainCommand is the same review without inline comments, posted if gerrit rejects the json.
+	plainCommand string
 }
 
 // reviewComment is an inline comment on a line of a file in the revision being reviewed.
@@ -157,6 +159,7 @@ func (s *ServerDetails) ReviewGerritWithComments(revision string, reviewScore st
 			log.WithError(err).WithField("revision", revision).Error("Unable to build review json, posting without inline comments")
 		} else {
 			// Gerrit refuses -m and --tag alongside --json, so everything goes in the json.
+			request.plainCommand = request.command
 			request.command = "gerrit review --json " + revision
 			request.stdin = stdin
 		}
@@ -211,6 +214,11 @@ func quoteGerritArg(value string) string {
 
 // sendReview posts a review, retrying with exponential backoff if gerrit cannot be reached.
 func (s *ServerDetails) sendReview(request reviewRequest) {
+	s.sendReviewUsing(request, s.postReview)
+}
+
+// sendReviewUsing is sendReview with the single attempt at posting passed in, so tests can fake gerrit.
+func (s *ServerDetails) sendReviewUsing(request reviewRequest, post func(command string, stdin []byte) ([]byte, error)) {
 	reviewLogger := log.WithFields(log.Fields{
 		"revision": request.revision,
 		"server":   s.Location,
@@ -218,7 +226,7 @@ func (s *ServerDetails) sendReview(request reviewRequest) {
 
 	delay := initialReviewDelay
 	for attempt := 1; ; attempt++ {
-		output, err := s.postReview(request.command, request.stdin)
+		output, err := post(request.command, request.stdin)
 		if err == nil {
 			log.Printf("%s: %s", string(output), request.message)
 			return
@@ -226,6 +234,13 @@ func (s *ServerDetails) sendReview(request reviewRequest) {
 
 		// The command ran and gerrit rejected it - retrying the same review won't help.
 		var exitErr *ssh.ExitError
+		if errors.As(err, &exitErr) && request.plainCommand != "" {
+			// Don't lose the verdict over the inline comments, e.g. one on a file gerrit won't accept.
+			reviewLogger.WithError(err).WithField("output", string(output)).Warn("gerrit rejected review with inline comments, posting without them")
+			request.command, request.stdin, request.plainCommand = request.plainCommand, nil, ""
+			attempt, delay = 0, initialReviewDelay
+			continue
+		}
 		if errors.As(err, &exitErr) {
 			reviewLogger.WithError(err).WithField("output", string(output)).Error("gerrit review command failed")
 			return

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/ssh"
 )
 
 // gerritSplit is a port of Gerrit's CommandFactoryProvider.split, which gerrit uses to turn an
@@ -93,4 +94,29 @@ func TestReviewJSON(t *testing.T) {
 
 	_, err = reviewJSON("0", "nope", "0", "x", nil)
 	assert.Error(t, err)
+}
+
+func TestSendReviewFallsBackWithoutInlineComments(t *testing.T) {
+	s := ServerDetails{}
+	request := reviewRequest{revision: "abc123", message: "it broke", command: "gerrit review --json abc123", stdin: []byte("{}"), plainCommand: "gerrit review -m 'it broke' abc123"}
+
+	var posted []string
+	s.sendReviewUsing(request, func(command string, stdin []byte) ([]byte, error) {
+		posted = append(posted, command)
+		if stdin != nil {
+			return []byte("fatal: file src/Foo.java not found in revision 1,1"), &ssh.ExitError{}
+		}
+		return nil, nil
+	})
+	assert.Equal(t, []string{"gerrit review --json abc123", "gerrit review -m 'it broke' abc123"}, posted)
+}
+
+func TestSendReviewDoesNotRetryRejectedPlainReview(t *testing.T) {
+	s := ServerDetails{}
+	posts := 0
+	s.sendReviewUsing(reviewRequest{command: "gerrit review abc123"}, func(string, []byte) ([]byte, error) {
+		posts++
+		return nil, &ssh.ExitError{}
+	})
+	assert.Equal(t, 1, posts)
 }

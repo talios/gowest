@@ -8,7 +8,7 @@ import (
 
 func TestBuild(t *testing.T) {
 
-	server := ServerDetails{"markd", "/Users/amrk/.ssh/id_rsa", "gerrit.smxemail.com:29418"}
+	server := ServerDetails{Username: "markd", Keyfile: "/Users/amrk/.ssh/id_rsa", Location: "gerrit.smxemail.com:29418"}
 	project := BuildProject{Name: "dev/smx3/smx3-monitoring", Version: "1.1", ProjectPath: "/tmp/gowest/workspace/dev/smx3/smx3-monitoring/develop-I1ed4922f4183d71442024e1c645709db36a15d1e-5", Server: server}
 
 	event := Event{

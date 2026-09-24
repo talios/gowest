@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	"golang.org/x/crypto/ssh"
@@ -34,7 +35,9 @@ func (k *keychain) loadPEM(file string) error {
 	return nil
 }
 
-func connectToSSH(username string, keyfile string, server string) (*ssh.Session, error) {
+// connectToSSH dials the server and opens a session. Callers must close both the session and
+// the client, otherwise the underlying TCP connection is leaked.
+func connectToSSH(username string, keyfile string, server string) (*ssh.Client, *ssh.Session, error) {
 	k := new(keychain)
 	k.loadPEM(keyfile)
 
@@ -48,13 +51,14 @@ func connectToSSH(username string, keyfile string, server string) (*ssh.Session,
 
 	client, err := ssh.Dial("tcp", server, config)
 	if err != nil {
-		panic("Failed to dial: " + err.Error())
+		return nil, nil, fmt.Errorf("failed to dial %s: %w", server, err)
 	}
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, err
+		client.Close()
+		return nil, nil, err
 	}
 
-	return session, nil
+	return client, session, nil
 }

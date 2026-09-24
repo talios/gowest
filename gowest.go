@@ -35,13 +35,17 @@ func main() {
 	server.Username, _ = cfg.GetValue("gerrit", "username")
 	server.Keyfile, _ = cfg.GetValue("gerrit", "keyfile")
 	server.Location, _ = cfg.GetValue("gerrit", "server")
+	server.startReviewWorker()
 
 	events := server.listenToGerrit(*verboseMode)
 
 	changeEventChannelMap := make(map[string]chan Event)
 
 	for {
-		event := <-events
+		event, ok := <-events
+		if !ok {
+			log.Fatal("Gerrit event stream closed")
+		}
 
 		switch event.Type {
 		// case "comment-added":

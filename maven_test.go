@@ -141,3 +141,29 @@ func TestErrorLineCollectorKeepsHeadAndTail(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("... %d more [ERROR] lines ...", 100-kept), marker)
 	assert.LessOrEqual(t, len(formatPreformatted(lines)), 200+len(marker)+5)
 }
+
+func TestErrorLineCollectorDropsMavenBoilerplate(t *testing.T) {
+	output := `[ERROR] COMPILATION ERROR :
+[ERROR] /src/main/java/Foo.java:[12,5] cannot find symbol
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project foo: Compilation failure -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :foo
+[ERROR] To see the full stack trace of the errors, re-run Maven with the '-e' switch
+[ERROR] Re-run Maven using the '-X' switch to enable verbose output
+`
+	c := newErrorLineCollector(4096)
+	w := &lineWriter{onLine: c.addIfError}
+	fmt.Fprint(w, output)
+	assert.Equal(t, []string{
+		"[ERROR] COMPILATION ERROR :",
+		"[ERROR] /src/main/java/Foo.java:[12,5] cannot find symbol",
+		"[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project foo: Compilation failure",
+	}, c.lines())
+}

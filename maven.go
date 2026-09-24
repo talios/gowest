@@ -300,6 +300,7 @@ func (w *lineWriter) flush() {
 type errorLineCollector struct {
 	mu        sync.Mutex
 	maxBytes  int
+	skipNext  bool
 	head      []string
 	headBytes int
 	tail      []string
@@ -319,6 +320,20 @@ func (c *errorLineCollector) addIfError(line string) {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	message := strings.TrimSpace(strings.TrimPrefix(line, "[ERROR]"))
+	if c.skipNext {
+		// The line after "After correcting the problems..." is the resume command itself.
+		c.skipNext = false
+		return
+	}
+	if mavenResumeHint.MatchString(message) {
+		c.skipNext = true
+		return
+	}
+	if isMavenBoilerplate(message) {
+		return
+	}
+	line = mavenHelpSuffix.ReplaceAllString(line, "")
 	// Count the indent and newline formatPreformatted adds, so maxBytes bounds the message itself.
 	size := len(line) + 5
 	half := c.maxBytes / 2
@@ -334,6 +349,27 @@ func (c *errorLineCollector) addIfError(line string) {
 		c.tail = c.tail[1:]
 		c.omitted++
 	}
+}
+
+var (
+	// Lines maven prints after every failure, which say nothing about this build's errors.
+	mavenBoilerplate = []*regexp.Regexp{
+		regexp.MustCompile(`^To see the full stack trace of the errors, re-run Maven with the`),
+		regexp.MustCompile(`^Re-run Maven using the '?-X'? switch`),
+		regexp.MustCompile(`^For more information about the errors and possible solutions, please read the following articles`),
+		regexp.MustCompile(`^\[Help \d+\] `),
+	}
+	mavenResumeHint = regexp.MustCompile(`^After correcting the problems, you can resume the build with the command`)
+	mavenHelpSuffix = regexp.MustCompile(`\s*-> \[Help \d+\]$`)
+)
+
+func isMavenBoilerplate(message string) bool {
+	for _, pattern := range mavenBoilerplate {
+		if pattern.MatchString(message) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *errorLineCollector) lines() []string {

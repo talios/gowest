@@ -154,7 +154,12 @@ func (project *BuildProject) buildMaven(event Event) {
 	case processStatus := <-processChannel:
 		switch processStatus {
 		case Success:
-			project.Server.ReviewGerrit(event.PatchSet.Revision, "+1", "+1", "+1", "oh hai - you much legend!")
+			approvals, err := project.Server.HighestApprovals(event.Change.Number, event.PatchSet.Revision)
+			if err != nil {
+				log.WithError(err).WithField("changeID", event.Change.ID).Warn("Unable to fetch existing votes, voting +1 on every label")
+			}
+			project.Server.ReviewGerrit(event.PatchSet.Revision, successScore(approvals, "Code-Review"),
+				successScore(approvals, "Verified"), successScore(approvals, "Merge"), "oh hai - you much legend!")
 		case Failure:
 			message := "oh noes - you did broke it!\n\n" + buildErr.Error()
 			if summary := output.failureSummary(); summary != "" {
@@ -170,6 +175,15 @@ func (project *BuildProject) buildMaven(event Event) {
 		//			// server.ReviewGerrit(event.PatchSet.Revision, "0", "0", "-1", "such sadness - much building aborted :(!")
 		//		}
 	}
+}
+
+// successScore is the vote for a label on a successful build: +1, unless someone has already
+// given it a +2. That gets 0 rather than being left out, so it still clears our "Verifying" -1.
+func successScore(approvals map[string]int, label string) string {
+	if approvals[strings.ToLower(label)] >= 2 {
+		return "0"
+	}
+	return "+1"
 }
 
 // buildWith runs the project's build command, copying its output to both the terminal and output.

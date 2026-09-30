@@ -120,3 +120,20 @@ func TestSendReviewDoesNotRetryRejectedPlainReview(t *testing.T) {
 	})
 	assert.Equal(t, 1, posts)
 }
+
+func TestHighestApprovals(t *testing.T) {
+	output := []byte(`{"number":42,"patchSets":[` +
+		`{"number":1,"revision":"old","approvals":[{"type":"Verified","value":"2"}]},` +
+		`{"number":2,"revision":"abc123","approvals":[` +
+		`{"type":"Code-Review","value":"1"},{"type":"Code-Review","value":"2"},{"type":"Verified","value":"-1"},{"type":"merge","value":"2"}]}]}
+{"type":"stats","rowCount":1}
+`)
+	approvals, err := highestApprovals(output, "abc123")
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]int{"code-review": 2, "verified": -1, "merge": 2}, approvals)
+
+	assert.Equal(t, "0", successScore(approvals, "Code-Review"))
+	assert.Equal(t, "+1", successScore(approvals, "Verified"))
+	assert.Equal(t, "0", successScore(approvals, "Merge"))
+	assert.Equal(t, "+1", successScore(nil, "Merge"))
+}

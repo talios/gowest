@@ -192,6 +192,56 @@ func reviewJSON(reviewScore string, verifiedScore string, mergeScore string, mes
 	})
 }
 
+// queriedChange is the part of a gerrit query --all-approvals result that carries the votes.
+type queriedChange struct {
+	PatchSets []struct {
+		Revision  string `json:"revision"`
+		Approvals []struct {
+			Type  string `json:"type"`
+			Value string `json:"value"`
+		} `json:"approvals"`
+	} `json:"patchSets"`
+}
+
+// HighestApprovals returns the highest vote on each label of a revision, keyed by lowercased
+// label name since gerrit matches label names case-insensitively.
+func (s *ServerDetails) HighestApprovals(change int, revision string) (map[string]int, error) {
+	output, err := s.runCommand(fmt.Sprintf("gerrit query --format=JSON --all-approvals change:%d", change))
+	if err != nil {
+		return nil, err
+	}
+	return highestApprovals(output, revision)
+}
+
+// highestApprovals parses gerrit query json output - one change per line, then a stats line.
+func highestApprovals(output []byte, revision string) (map[string]int, error) {
+	approvals := map[string]int{}
+	scanner := bufio.NewScanner(bytes.NewReader(output))
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		var change queriedChange
+		if err := json.Unmarshal(scanner.Bytes(), &change); err != nil {
+			return nil, fmt.Errorf("unable to parse gerrit query output: %w", err)
+		}
+		for _, patchSet := range change.PatchSets {
+			if patchSet.Revision != revision {
+				continue
+			}
+			for _, approval := range patchSet.Approvals {
+				value, err := strconv.Atoi(approval.Value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %s approval %q: %w", approval.Type, approval.Value, err)
+				}
+				label := strings.ToLower(approval.Type)
+				if current, ok := approvals[label]; !ok || value > current {
+					approvals[label] = value
+				}
+			}
+		}
+	}
+	return approvals, scanner.Err()
+}
+
 // reviewCommand builds the gerrit review command line for a revision.
 func reviewCommand(revision string, reviewScore string, verifiedScore string, mergeScore string, message string) string {
 	command := "gerrit review -t gowest"
@@ -274,6 +324,19 @@ func (s *ServerDetails) postReview(reviewCommand string, stdin []byte) ([]byte, 
 		session.Stdin = bytes.NewReader(stdin)
 	}
 	return session.CombinedOutput(reviewCommand)
+}
+
+// runCommand runs a gerrit ssh command and returns its standard output.
+func (s *ServerDetails) runCommand(command string) ([]byte, error) {
+	client, session, err := connectToSSH(s.Username, s.Keyfile, s.Location)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create session: %w", err)
+	}
+
+	defer client.Close()
+	defer session.Close()
+
+	return session.Output(command)
 }
 
 const (

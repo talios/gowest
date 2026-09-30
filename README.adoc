@@ -16,6 +16,22 @@ go get
 go build
 ----
 
+== Configuration
+
+Gowest reads `gowest.ini` from the working directory. The `[gowest]` section supports:
+
+`workspace`:: Directory the projects are checked out and built in.
+`clearVerificationLabel`:: When `true`, vote Verified -1 as a build starts, clearing any
+earlier verdict until the build finishes. Defaults to `false`, which leaves the Verified vote
+unchanged until the build's result is posted.
+
+[source,ini]
+----
+[gowest]
+workspace=/tmp/gowest
+clearVerificationLabel=false
+----
+
 == License
 
 Apache 2.0

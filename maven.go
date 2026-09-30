@@ -135,7 +135,11 @@ func (project *BuildProject) buildMaven(event Event) {
 	msg := "Building " + event.Project + " change " + event.Change.ID + "@" + event.PatchSet.Revision
 	beeep.Notify("GoWest", msg, "assets/information.png")
 
-	project.Server.ReviewGerrit(event.PatchSet.Revision, "0", "-1", "0", "Verifying build...")
+	verifiedScore := ""
+	if project.Server.ClearVerificationLabel {
+		verifiedScore = "-1"
+	}
+	project.Server.ReviewGerrit(event.PatchSet.Revision, "0", verifiedScore, "0", "Verifying build...")
 
 	processChannel := make(chan BuildProcess)
 	output := newBuildOutput()
@@ -178,7 +182,7 @@ func (project *BuildProject) buildMaven(event Event) {
 }
 
 // successScore is the vote for a label on a successful build: +1, unless someone has already
-// given it a +2. That gets 0 rather than being left out, so it still clears our "Verifying" -1.
+// given it a +2. That gets 0 rather than being left out, so it still clears any "Verifying" -1.
 func successScore(approvals map[string]int, label string) string {
 	if approvals[strings.ToLower(label)] >= 2 {
 		return "0"
@@ -204,6 +208,7 @@ func buildWith(ctx context.Context, project *BuildProject, event Event, output *
 	if project.RepoType == "change" {
 		args = append(args, fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.ID))
 	}
+
 	args = append(args, commandParts[1:]...)
 	mvnCmd := exec.Command(commandParts[0], args...)
 	mvnCmd.Dir = project.ProjectPath

@@ -86,6 +86,8 @@ type ServerDetails struct {
 	Username string
 	Keyfile  string
 	Location string
+	// ClearVerificationLabel votes Verified -1 when a build starts, clearing any earlier verdict.
+	ClearVerificationLabel bool
 
 	// reviews queues reviews for the review worker; nil until startReviewWorker is called.
 	reviews chan reviewRequest
@@ -138,8 +140,9 @@ func (s *ServerDetails) startReviewWorker() {
 	}()
 }
 
-// ReviewGerrit queues a score and message for a given gerrit revision. It only blocks if the
-// review queue is full; without a review worker it posts the review synchronously.
+// ReviewGerrit queues a score and message for a given gerrit revision. An empty score leaves that
+// label's vote unchanged. It only blocks if the review queue is full; without a review worker it
+// posts the review synchronously.
 func (s *ServerDetails) ReviewGerrit(revision string, reviewScore string, verifiedScore string, mergeScore string, message string) {
 	s.ReviewGerritWithComments(revision, reviewScore, verifiedScore, mergeScore, message, nil)
 }
@@ -177,6 +180,9 @@ func (s *ServerDetails) ReviewGerritWithComments(revision string, reviewScore st
 func reviewJSON(reviewScore string, verifiedScore string, mergeScore string, message string, comments map[string][]reviewComment) ([]byte, error) {
 	labels := map[string]int{}
 	for label, score := range map[string]string{"Code-Review": reviewScore, "Verified": verifiedScore, "Merge": mergeScore} {
+		if score == "" {
+			continue
+		}
 		value, err := strconv.Atoi(score)
 		if err != nil {
 			return nil, fmt.Errorf("invalid %s score %q: %w", label, score, err)
@@ -249,8 +255,14 @@ func reviewCommand(revision string, reviewScore string, verifiedScore string, me
 	if message != "" {
 		command += " -m " + quoteGerritArg(message)
 	}
-	return fmt.Sprintf("%s --verified %s --merge %s --code-review %s %s",
-		command, verifiedScore, mergeScore, reviewScore, revision)
+	for _, option := range []struct{ flag, score string }{
+		{"--verified", verifiedScore}, {"--merge", mergeScore}, {"--code-review", reviewScore},
+	} {
+		if option.score != "" {
+			command += " " + option.flag + " " + option.score
+		}
+	}
+	return command + " " + revision
 }
 
 /*

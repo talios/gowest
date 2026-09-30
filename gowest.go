@@ -35,6 +35,7 @@ func main() {
 	server.Username, _ = cfg.GetValue("gerrit", "username")
 	server.Keyfile, _ = cfg.GetValue("gerrit", "keyfile")
 	server.Location, _ = cfg.GetValue("gerrit", "server")
+	server.ClearVerificationLabel = cfg.MustBool("gowest", "clearVerificationLabel")
 	server.startReviewWorker()
 
 	events := server.listenToGerrit(*verboseMode)

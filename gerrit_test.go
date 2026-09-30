@@ -79,6 +79,18 @@ func TestReviewCommandOmitsEmptyMessage(t *testing.T) {
 		"--verified", "+1", "--merge", "+1", "--code-review", "+1", "abc123"}, args)
 }
 
+func TestReviewCommandLeavesEmptyScoresUnchanged(t *testing.T) {
+	args := gerritSplit(reviewCommand("abc123", "0", "", "0", "Verifying build..."))
+	assert.Equal(t, []string{"gerrit", "review", "-t", "gowest", "-m", "Verifying build...",
+		"--merge", "0", "--code-review", "0", "abc123"}, args)
+}
+
+func TestReviewJSONLeavesEmptyScoresUnchanged(t *testing.T) {
+	input, err := reviewJSON("0", "", "0", "x", nil)
+	assert.NoError(t, err)
+	assert.JSONEq(t, `{"message": "x", "tag": "gowest", "labels": {"Code-Review": 0, "Merge": 0}, "omit_duplicate_comments": true}`, string(input))
+}
+
 func TestReviewJSON(t *testing.T) {
 	input, err := reviewJSON("0", "-1", "+1", "it broke", map[string][]reviewComment{
 		"src/Foo.java": {{Line: 18, Message: "cannot find symbol", Unresolved: true}},

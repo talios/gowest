@@ -73,7 +73,7 @@ func resolveProject(config *goconfig.ConfigFile, projectKey string, server Serve
 			return nil, err
 		}
 
-		defaultType := "local"
+		defaultType := "owner"
 		repoType, err := config.GetValue(projectKey, "repo")
 
 		if err != nil {
@@ -207,6 +207,9 @@ func buildWith(ctx context.Context, project *BuildProject, event Event, output *
 	}
 	if project.RepoType == "change" {
 		args = append(args, fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.ID))
+	}
+	if project.RepoType == "owner" {
+		args = append(args, fmt.Sprintf("-Dmaven.repo.local=/tmp/gowest/repo/%s", event.Change.Owner.Username))
 	}
 
 	args = append(args, commandParts[1:]...)

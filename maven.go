@@ -163,9 +163,9 @@ func (project *BuildProject) buildMaven(event Event) {
 				log.WithError(err).WithField("changeID", event.Change.ID).Warn("Unable to fetch existing votes, voting +1 on every label")
 			}
 			project.Server.ReviewGerrit(event.PatchSet.Revision, successScore(approvals, "Code-Review"),
-				successScore(approvals, "Verified"), successScore(approvals, "Merge"), "oh hai - you much legend!")
+				successScore(approvals, "Verified"), successScore(approvals, "Merge"), "Build Verification Success!")
 		case Failure:
-			message := "oh noes - you did broke it!\n\n" + buildErr.Error()
+			message := "Build Verification Failure!\n\n" + buildErr.Error()
 			if summary := output.failureSummary(); summary != "" {
 				message += "\n\n" + summary
 			}

@@ -80,7 +80,7 @@ func resolveProject(config *goconfig.ConfigFile, projectKey string, server Serve
 			repoType = defaultType
 		}
 
-		defaultBuildCommand := "mvnd clean verify"
+		defaultBuildCommand := "mvn clean verify"
 		buildCommand, err := config.GetValue(projectKey, "build-command")
 
 		if err != nil {

@@ -1,0 +1,30 @@
+[tools]
+go = "latest"
+
+[tasks.deps]
+description = "Bump go.mod to the current Go release, update dependencies and tidy go.mod"
+run = [
+  "go mod edit -go=$(go env GOVERSION | sed -E 's/^go([0-9]+\\.[0-9]+).*/\\1.0/')",
+  "go get -u -t ./...",
+  "go mod tidy",
+]
+
+[tasks.tidy]
+description = "Tidy go.mod and go.sum"
+run = "go mod tidy"
+
+[tasks.build]
+description = "Build the gowest binary"
+depends = ["deps"]
+sources = ["*.go", "go.mod", "go.sum"]
+outputs = ["gowest"]
+run = "go build -o gowest ."
+
+[tasks.test]
+description = "Run tests"
+run = "go test ./..."
+
+[tasks.install]
+description = "Install gowest into $GOPATH/bin"
+depends = ["test", "build"]
+run = "go install ."

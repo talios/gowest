@@ -4,16 +4,15 @@ go 1.26.0
 
 require (
 	github.com/Unknwon/goconfig v1.0.0
+	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/gen2brain/beeep v0.11.3
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/crypto v0.58.0
-	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	golang.org/x/crypto v0.59.0
 )
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/esiqveland/notify v0.14.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -24,6 +23,7 @@ require (
 	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.8.1 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
+	github.com/xhit/go-str2duration/v2 v2.2.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
